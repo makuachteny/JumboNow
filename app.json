@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "JumboNow",
+    "slug": "JumboNow",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "jumbonow",
+    "splash": {
+      "image": "./assets/jumbo-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#D6ECFA"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jumbonow.app",
+      "buildNumber": "1",
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+      },
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "JumboNow needs access to your photos to set a profile picture.",
+        "NSCameraUsageDescription": "JumboNow needs access to your camera to take a profile picture.",
+        "NSLocationWhenInUseUsageDescription": "JumboNow uses your location to show nearby campus buildings and shuttles."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#D6ECFA"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.jumbonow.app",
+      "versionCode": 1,
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        }
+      },
+      "permissions": [
+        "INTERNET",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "JumboNow needs access to your photos to set a profile picture.",
+          "cameraPermission": "JumboNow needs access to your camera to take a profile picture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "JumboNow uses your location to show nearby campus buildings and shuttles."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#418FDE"
+        }
+      ]
+    ]
+  }
+}
