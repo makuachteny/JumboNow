@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,26 +8,46 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './src/config/supabase';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
+// Eager: only the screens needed at cold start
 import LandingScreen from './src/screens/LandingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
-import OnboardingScreen from './src/screens/OnboardingScreen';
-import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import NotificationsScreen from './src/screens/NotificationsScreen';
-import FriendsScreen from './src/screens/FriendsScreen';
-import DiscoverScreen from './src/screens/DiscoverScreen';
-import EventDetailScreen from './src/screens/EventDetailScreen';
-import MyTicketsScreen from './src/screens/MyTicketsScreen';
-import CreateEventScreen from './src/screens/CreateEventScreen';
-import ChatScreen from './src/screens/ChatScreen';
-import MapScreen from './src/screens/MapScreen';
-import FreeFoodScreen from './src/screens/FreeFoodScreen';
-import DiningScreen from './src/screens/DiningScreen';
-import DiningMenuScreen from './src/screens/DiningMenuScreen';
-import FreeFoodBanner from './src/components/FreeFoodBanner';
+
+// Lazy: everything else loads on-demand when navigated to
+const OnboardingScreen = lazy(() => import('./src/screens/OnboardingScreen'));
+const EmailVerificationScreen = lazy(() => import('./src/screens/EmailVerificationScreen'));
+const ProfileScreen = lazy(() => import('./src/screens/ProfileScreen'));
+const NotificationsScreen = lazy(() => import('./src/screens/NotificationsScreen'));
+const FriendsScreen = lazy(() => import('./src/screens/FriendsScreen'));
+const DiscoverScreen = lazy(() => import('./src/screens/DiscoverScreen'));
+const EventDetailScreen = lazy(() => import('./src/screens/EventDetailScreen'));
+const MyTicketsScreen = lazy(() => import('./src/screens/MyTicketsScreen'));
+const CreateEventScreen = lazy(() => import('./src/screens/CreateEventScreen'));
+const ChatScreen = lazy(() => import('./src/screens/ChatScreen'));
+const MapScreen = lazy(() => import('./src/screens/MapScreen'));
+const FreeFoodScreen = lazy(() => import('./src/screens/FreeFoodScreen'));
+const DiningScreen = lazy(() => import('./src/screens/DiningScreen'));
+const DiningMenuScreen = lazy(() => import('./src/screens/DiningMenuScreen'));
+const CampusResourcesScreen = lazy(() => import('./src/screens/CampusResourcesScreen'));
+const GroupChatScreen = lazy(() => import('./src/screens/GroupChatScreen'));
+const FreeFoodBanner = lazy(() => import('./src/components/FreeFoodBanner'));
 import { usePushNotifications } from './src/hooks/usePushNotifications';
+
+// Suspense wrapper for lazy screens in React Navigation
+function withSuspense(LazyComponent) {
+  return function SuspenseScreen(props) {
+    return (
+      <Suspense fallback={<View style={suspenseStyles.container}><ActivityIndicator size="large" color="#418FDE" /></View>}>
+        <LazyComponent {...props} />
+      </Suspense>
+    );
+  };
+}
+
+const suspenseStyles = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+});
 
 const Stack = createNativeStackNavigator();
 const navigationRef = createNavigationContainerRef();
@@ -44,8 +64,10 @@ const linking = {
       MyTickets: 'tickets',
       Map: 'map',
       FreeFood: 'freefood',
+      GroupChat: 'groupchat/:groupConversationId',
       Dining: 'dining',
       DiningMenu: 'dining/:slug',
+      CampusResources: 'campus',
     },
   },
 };
@@ -137,26 +159,35 @@ function AppNavigator() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
+        {/* Eager screens — available instantly */}
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
-        <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
-        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="Profile" component={ProfileScreen} />
-        <Stack.Screen name="Notifications" component={NotificationsScreen} />
-        <Stack.Screen name="Friends" component={FriendsScreen} />
-        <Stack.Screen name="Discover" component={DiscoverScreen} />
-        <Stack.Screen name="EventDetail" component={EventDetailScreen} />
-        <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
-        <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
-        <Stack.Screen name="Map" component={MapScreen} options={{ animation: 'slide_from_left' }} />
-        <Stack.Screen name="FreeFood" component={FreeFoodScreen} />
-        <Stack.Screen name="Dining" component={DiningScreen} />
-        <Stack.Screen name="DiningMenu" component={DiningMenuScreen} />
+
+        {/* Lazy screens — loaded on demand */}
+        <Stack.Screen name="EmailVerification" component={withSuspense(EmailVerificationScreen)} />
+        <Stack.Screen name="Onboarding" component={withSuspense(OnboardingScreen)} />
+        <Stack.Screen name="Profile" component={withSuspense(ProfileScreen)} />
+        <Stack.Screen name="Notifications" component={withSuspense(NotificationsScreen)} />
+        <Stack.Screen name="Friends" component={withSuspense(FriendsScreen)} />
+        <Stack.Screen name="Discover" component={withSuspense(DiscoverScreen)} />
+        <Stack.Screen name="EventDetail" component={withSuspense(EventDetailScreen)} />
+        <Stack.Screen name="MyTickets" component={withSuspense(MyTicketsScreen)} />
+        <Stack.Screen name="CreateEvent" component={withSuspense(CreateEventScreen)} />
+        <Stack.Screen name="Chat" component={withSuspense(ChatScreen)} />
+        <Stack.Screen name="Map" component={withSuspense(MapScreen)} options={{ animation: 'slide_from_left' }} />
+        <Stack.Screen name="FreeFood" component={withSuspense(FreeFoodScreen)} />
+        <Stack.Screen name="Dining" component={withSuspense(DiningScreen)} />
+        <Stack.Screen name="DiningMenu" component={withSuspense(DiningMenuScreen)} />
+        <Stack.Screen name="CampusResources" component={withSuspense(CampusResourcesScreen)} />
+        <Stack.Screen name="GroupChat" component={withSuspense(GroupChatScreen)} />
       </Stack.Navigator>
-      {session && <FreeFoodBanner />}
+      {session && (
+        <Suspense fallback={null}>
+          <FreeFoodBanner />
+        </Suspense>
+      )}
     </NavigationContainer>
   );
 }

@@ -12,16 +12,23 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   Send,
+  Share2,
   MessageCircle,
   Search,
+  Calendar,
+  MapPin,
+  X,
 } from 'lucide-react-native';
 import { chatService } from '../services/chat.service';
 import { friendsService } from '../services/friends.service';
+import { eventsService } from '../services/events.service';
 import { supabase } from '../config/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
@@ -74,7 +81,7 @@ function formatMessageTime(dateStr) {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function ChatScreen({ navigation }) {
+export default function ChatScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -98,6 +105,11 @@ export default function ChatScreen({ navigation }) {
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
 
+  // Event share state
+  const [showEventPicker, setShowEventPicker] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+
   const flatListRef = useRef(null);
   const subscriptionRef = useRef(null);
   const convSubscriptionRef = useRef(null);
@@ -111,6 +123,23 @@ export default function ChatScreen({ navigation }) {
       if (user) setCurrentUserId(user.id);
     })();
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // Auto-open conversation if navigated with friendId
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (route.params?.friendId && currentUserId && !activeConversation) {
+      // Find friend profile from friends list or create minimal object
+      const friendId = route.params.friendId;
+      const friend = friends.find((f) => f.id === friendId);
+      if (friend) {
+        openConversation(friend);
+      } else {
+        // Open with just the id — openConversation will fetch or create
+        openConversation({ id: friendId });
+      }
+    }
+  }, [route.params?.friendId, currentUserId, friends]);
 
   // ---------------------------------------------------------------------------
   // Fetch conversations + friends
@@ -195,13 +224,18 @@ export default function ChatScreen({ navigation }) {
       subscriptionRef.current.unsubscribe();
       subscriptionRef.current = null;
     }
+    // If opened from FriendsScreen with a friendId, go back instead of showing convo list
+    if (route.params?.friendId) {
+      navigation.goBack();
+      return;
+    }
     setActiveConversation(null);
     setMessages([]);
     setMessageText('');
     setChatError(null);
     // Refresh conversation list to reflect read status / new messages
     fetchConversations();
-  }, [fetchConversations]);
+  }, [fetchConversations, route.params?.friendId, navigation]);
 
   // ---------------------------------------------------------------------------
   // Send a message
@@ -223,6 +257,44 @@ export default function ChatScreen({ navigation }) {
       setSending(false);
     }
   }, [messageText, sending, activeConversation]);
+
+  // ---------------------------------------------------------------------------
+  // Event share handlers
+  // ---------------------------------------------------------------------------
+  const openEventPicker = useCallback(async () => {
+    setShowEventPicker(true);
+    setEventsLoading(true);
+    try {
+      const data = await eventsService.getEvents();
+      setEvents((data || []).slice(0, 20));
+    } catch {
+      setEvents([]);
+    } finally {
+      setEventsLoading(false);
+    }
+  }, []);
+
+  const handleShareEvent = useCallback(async (event) => {
+    if (!activeConversation) return;
+    setShowEventPicker(false);
+    setSending(true);
+    try {
+      const metadata = {
+        type: 'event_share',
+        event_id: event.id,
+        event_title: event.title,
+        event_date: event.start_time,
+        event_location: event.location || '',
+        event_icon: event.icon || '\uD83C\uDF89',
+      };
+      const sentMsg = await chatService.sendMessage(activeConversation.id, '', metadata);
+      setMessages((prev) => [...prev, sentMsg]);
+    } catch (err) {
+      setChatError(err.message || 'Failed to share event.');
+    } finally {
+      setSending(false);
+    }
+  }, [activeConversation]);
 
   // ---------------------------------------------------------------------------
   // Filter conversations by search
@@ -252,6 +324,46 @@ export default function ChatScreen({ navigation }) {
 
     const renderMessage = ({ item }) => {
       const isMine = item.sender_id === currentUserId;
+
+      // Event share card
+      if (item.metadata?.type === 'event_share') {
+        const meta = item.metadata;
+        const eventDate = meta.event_date
+          ? new Date(meta.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+          : '';
+        return (
+          <View style={[styles.messageBubbleRow, isMine ? styles.messageBubbleRowRight : styles.messageBubbleRowLeft]}>
+            {!isMine && (
+              <View style={[styles.msgAvatar, { backgroundColor: avatarColor }]}>
+                <Text style={styles.msgAvatarText}>{avatarInitials}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.eventShareCard}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('EventDetail', { eventId: meta.event_id })}
+            >
+              <View style={styles.eventShareHeader}>
+                <View style={styles.eventShareIconWrap}>
+                  <Text style={styles.eventShareIcon}>{meta.event_icon || '\uD83C\uDF89'}</Text>
+                </View>
+                <View style={styles.eventShareInfo}>
+                  <Text style={styles.eventShareTitle} numberOfLines={2}>{meta.event_title}</Text>
+                  {eventDate ? <Text style={styles.eventShareDate}>{eventDate}</Text> : null}
+                  {meta.event_location ? <Text style={styles.eventShareLocation} numberOfLines={1}>{meta.event_location}</Text> : null}
+                </View>
+              </View>
+              <View style={styles.viewEventBtn}>
+                <Text style={styles.viewEventBtnText}>View Event</Text>
+              </View>
+              <Text style={[styles.messageTime, isMine ? styles.messageTimeSent : styles.messageTimeReceived]}>
+                {formatMessageTime(item.created_at)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
       return (
         <View
           style={[
@@ -369,6 +481,9 @@ export default function ChatScreen({ navigation }) {
 
           {/* Input Bar */}
           <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+            <TouchableOpacity style={styles.shareButton} onPress={openEventPicker}>
+              <Share2 size={18} color={colors.accent} />
+            </TouchableOpacity>
             <TextInput
               style={styles.textInput}
               placeholder="Type a message..."
@@ -395,6 +510,50 @@ export default function ChatScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Event Picker Modal */}
+        <Modal visible={showEventPicker} animationType="slide" transparent onRequestClose={() => setShowEventPicker(false)}>
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerContent}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Share an Event</Text>
+                <TouchableOpacity onPress={() => setShowEventPicker(false)}>
+                  <X size={22} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+              {eventsLoading ? (
+                <ActivityIndicator size="large" color={colors.accent} style={{ paddingVertical: 40 }} />
+              ) : (
+                <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                  {events.length === 0 ? (
+                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                      <Calendar size={40} color={colors.accentMuted} />
+                      <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 12 }}>No upcoming events</Text>
+                    </View>
+                  ) : (
+                    events.map((event) => (
+                      <TouchableOpacity
+                        key={event.id}
+                        style={styles.eventPickerItem}
+                        onPress={() => handleShareEvent(event)}
+                      >
+                        <Text style={styles.eventPickerIcon}>{event.icon || '\uD83C\uDF89'}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.eventPickerTitle} numberOfLines={1}>{event.title}</Text>
+                          <Text style={styles.eventPickerMeta} numberOfLines={1}>
+                            {new Date(event.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {event.location ? ` \u2022 ${event.location}` : ''}
+                          </Text>
+                        </View>
+                        <Send size={16} color={colors.accent} />
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
       </LinearGradient>
     );
   }
@@ -554,8 +713,6 @@ export default function ChatScreen({ navigation }) {
         />
       )}
 
-      {/* BottomNav shown only on conversation list view */}
-      <BottomNav navigation={navigation} activeTab="Chat" />
     </LinearGradient>
   );
 }
@@ -580,8 +737,8 @@ const createStyles = (colors) =>
       borderBottomColor: colors.glassBorder,
     },
     backButton: {
-      width: 42,
-      height: 42,
+      width: 44,
+      height: 44,
       borderRadius: 14,
       backgroundColor: colors.glass,
       alignItems: 'center',
@@ -962,4 +1119,84 @@ const createStyles = (colors) =>
     sendButtonDisabled: {
       opacity: 0.4,
     },
+    shareButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.glass,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+    },
+
+    // Event share card
+    eventShareCard: {
+      width: 260,
+      maxWidth: '85%',
+      padding: 14,
+      borderRadius: 16,
+      backgroundColor: colors.glass,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+    },
+    eventShareHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 10,
+    },
+    eventShareIconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: colors.accentBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    eventShareIcon: { fontSize: 24 },
+    eventShareInfo: { flex: 1 },
+    eventShareTitle: { color: colors.text, fontSize: 15, fontWeight: '700', lineHeight: 20 },
+    eventShareDate: { color: colors.accent, fontSize: 12, fontWeight: '600', marginTop: 3 },
+    eventShareLocation: { color: colors.textTertiary, fontSize: 12, marginTop: 1 },
+    viewEventBtn: {
+      alignItems: 'center',
+      paddingVertical: 9,
+      borderRadius: 10,
+      backgroundColor: colors.accentBg,
+      borderWidth: 1,
+      borderColor: colors.accentBorder,
+      marginBottom: 4,
+    },
+    viewEventBtnText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+
+    // Event picker modal
+    pickerOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+    pickerContent: {
+      backgroundColor: colors.modalBg || colors.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 24,
+      maxHeight: '70%',
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
+    },
+    pickerHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 20,
+    },
+    pickerTitle: { color: colors.text, fontSize: 22, fontWeight: '900' },
+    eventPickerItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      borderRadius: 12,
+    },
+    eventPickerIcon: { fontSize: 28 },
+    eventPickerTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    eventPickerMeta: { color: colors.textTertiary, fontSize: 12, marginTop: 2 },
   });

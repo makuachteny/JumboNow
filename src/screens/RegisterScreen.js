@@ -168,6 +168,8 @@ export default function RegisterScreen({ navigation }) {
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
                 onFocus={() => setFocusedField('username')}
                 onBlur={() => setFocusedField(null)}
               />
@@ -191,6 +193,8 @@ export default function RegisterScreen({ navigation }) {
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
                 keyboardType="email-address"
                 onFocus={() => setFocusedField('email')}
                 onBlur={() => setFocusedField(null)}
@@ -364,23 +368,22 @@ const createStyles = (colors) => StyleSheet.create({
   },
   formArea: {
     flex: 1,
-    justifyContent: 'center',
   },
   logoArea: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 14,
   },
   logo: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+    width: 64,
+    height: 64,
+    borderRadius: 16,
   },
   titleArea: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 20,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '900',
     color: colors.text,
     letterSpacing: -1,

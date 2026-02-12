@@ -26,9 +26,12 @@ import {
   Star,
   Trash2,
 } from 'lucide-react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { ticketsService } from '../services/tickets.service';
 import { useTheme } from '../context/ThemeContext';
 import { withOpacity } from '../utils/safeColor';
+import SmartIcon from '../components/SmartIcon';
+import { getEventIcon } from '../config/clubLogos';
 import BottomNav from '../components/BottomNav';
 
 export default function MyTicketsScreen({ navigation }) {
@@ -42,6 +45,7 @@ export default function MyTicketsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [ratingsState, setRatingsState] = useState({});
+  const [expandedQr, setExpandedQr] = useState(null);
 
   const fetchTickets = useCallback(async () => {
     try {
@@ -182,7 +186,7 @@ export default function MyTicketsScreen({ navigation }) {
         <View style={styles.ticketContent}>
           <View style={styles.ticketTop}>
             <View style={[styles.ticketIconWrap, { backgroundColor: withOpacity(accentColor, '20', colors.accent) }]}>
-              <Text style={styles.ticketIcon}>{event.icon || '\uD83C\uDFAB'}</Text>
+              <SmartIcon value={getEventIcon(event, '\uD83C\uDFAB')} size={28} borderRadius={10} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.ticketTitle} numberOfLines={1}>{event.title}</Text>
@@ -235,24 +239,57 @@ export default function MyTicketsScreen({ navigation }) {
             </TouchableOpacity>
           )}
 
-          <View style={styles.ticketFooter}>
-            <TouchableOpacity
-              style={styles.codeWrap}
-              onPress={async () => {
-                await Clipboard.setStringAsync(ticket.confirmation_code);
-                Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
-              }}
-              accessibilityLabel="Copy confirmation code"
-              accessibilityRole="button"
-            >
+          {/* QR Code Section */}
+          <TouchableOpacity
+            style={styles.qrToggleRow}
+            onPress={() => setExpandedQr(expandedQr === ticket.id ? null : ticket.id)}
+            accessibilityLabel="Show QR code"
+            accessibilityRole="button"
+          >
+            <View style={styles.codeWrap}>
               <Text style={styles.codeLabel}>Code:</Text>
               <Text style={styles.codeValue}>{ticket.confirmation_code}</Text>
-              <Text style={styles.codeCopy}>Copy</Text>
-            </TouchableOpacity>
-            <View style={styles.footerRight}>
+            </View>
+            <View style={styles.qrToggleBtn}>
+              <Text style={styles.qrToggleText}>
+                {expandedQr === ticket.id ? 'Hide QR' : 'Show QR'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {expandedQr === ticket.id && (
+            <View style={styles.qrExpandedSection}>
+              <View style={styles.qrCodeContainer}>
+                <QRCode
+                  value={`jumbonow://ticket/${ticket.confirmation_code}`}
+                  size={140}
+                  backgroundColor="#FFFFFF"
+                  color="#0B1A2E"
+                  quietZone={10}
+                />
+              </View>
+              <Text style={styles.qrHintText}>Scan at entry for check-in</Text>
+              <TouchableOpacity
+                style={styles.copyCodeBtn}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(ticket.confirmation_code);
+                  Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
+                }}
+                accessibilityLabel="Copy confirmation code"
+                accessibilityRole="button"
+              >
+                <Text style={styles.copyCodeBtnText}>Copy Code</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.ticketFooter}>
+            <View style={styles.footerLeft}>
               {ticket.price_paid > 0 && (
                 <Text style={styles.ticketPrice}>${ticket.price_paid}</Text>
               )}
+            </View>
+            <View style={styles.footerRight}>
               {canCancel && (
                 <TouchableOpacity
                   style={styles.cancelBtn}
@@ -357,7 +394,7 @@ export default function MyTicketsScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  }, [colors, styles, activeTab, navigation, handleCancel, handleDelete, statusColors, ratingsState, handleStarPress, handleFeedbackChange, handleSubmitRating]);
+  }, [colors, styles, activeTab, navigation, handleCancel, handleDelete, statusColors, ratingsState, handleStarPress, handleFeedbackChange, handleSubmitRating, expandedQr]);
 
   const ListEmpty = () => {
     if (loading) return <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />;
@@ -478,12 +515,23 @@ const createStyles = (colors) => StyleSheet.create({
   ticketMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   ticketMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ticketMetaText: { color: colors.textTertiary, fontSize: 11, fontWeight: '500' },
-  ticketFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.glassBorder },
-  footerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // QR Code toggle row
+  qrToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.glassBorder },
   codeWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   codeLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: '600' },
   codeValue: { color: colors.accent, fontSize: 13, fontWeight: '800', letterSpacing: 1 },
-  codeCopy: { color: colors.accentMuted, fontSize: 10, fontWeight: '600', marginLeft: 4 },
+  qrToggleBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
+  qrToggleText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
+  // QR expanded section
+  qrExpandedSection: { alignItems: 'center', paddingTop: 14, gap: 10 },
+  qrCodeContainer: { padding: 10, borderRadius: 14, backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  qrHintText: { color: colors.textTertiary, fontSize: 12, fontWeight: '600' },
+  copyCodeBtn: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 10, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
+  copyCodeBtnText: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+  // Footer
+  ticketFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 },
+  footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  footerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   ticketPrice: { color: colors.accent, fontSize: 14, fontWeight: '800' },
   walletBtn: { backgroundColor: '#000', borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
   walletBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },

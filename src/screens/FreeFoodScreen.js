@@ -16,6 +16,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,7 +31,15 @@ import {
   X,
   ExternalLink,
   AlertCircle,
+  Camera,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  UserCheck,
+  UserX,
+  Image as ImageIcon,
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../context/ThemeContext';
 import { freeFoodService } from '../services/freefood.service';
 import { CAMPUS_LOCATIONS, LOCATION_CATEGORIES } from '../data/campusLocations';
@@ -74,10 +83,13 @@ function getCountdown(expiresAt) {
   return rem > 0 ? `${hrs}h ${rem}m left` : `${hrs}h left`;
 }
 
-export default function FreeFoodScreen({ navigation }) {
+const ETA_OPTIONS = ['5 min', '10 min', '15 min', '30 min'];
+
+export default function FreeFoodScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const flatListRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +106,23 @@ export default function FreeFoodScreen({ navigation }) {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [customDetail, setCustomDetail] = useState('');
   const [expirationMins, setExpirationMins] = useState(120);
+  const [imageUri, setImageUri] = useState(null);
+
+  // Accept/confirm flow state
+  const [myRequests, setMyRequests] = useState({}); // { postId: request }
+  const [expandedPostId, setExpandedPostId] = useState(null); // which card is expanded
+  const [expandedRequests, setExpandedRequests] = useState(null); // postId for requester list
+  const [postRequests, setPostRequests] = useState({}); // { postId: [requests] }
+
+  // Accept form modal state
+  const [acceptModalPostId, setAcceptModalPostId] = useState(null);
+  const [acceptPartySize, setAcceptPartySize] = useState(1);
+  const [acceptEta, setAcceptEta] = useState(null);
+  const [acceptDietaryNotes, setAcceptDietaryNotes] = useState('');
+  const [acceptSubmitting, setAcceptSubmitting] = useState(false);
+
+  // Confirmation modal state
+  const [confirmationCode, setConfirmationCode] = useState(null);
 
   // Countdown refresh ticker
   const [, setTick] = useState(0);
@@ -128,9 +157,19 @@ export default function FreeFoodScreen({ navigation }) {
     } catch (_) {}
   }, []);
 
+  const loadMyRequests = useCallback(async () => {
+    try {
+      const reqs = await freeFoodService.getMyRequests();
+      const map = {};
+      reqs.forEach((r) => { map[r.post_id] = r; });
+      setMyRequests(map);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     loadPosts();
     loadSubscription();
+    loadMyRequests();
 
     // Get current user ID
     const { data: { subscription } } = require('../config/supabase').supabase.auth.onAuthStateChange(
@@ -142,16 +181,55 @@ export default function FreeFoodScreen({ navigation }) {
       setCurrentUserId(session?.user?.id || null);
     });
 
-    // Real-time subscription
+    // Real-time subscription for post changes
     const channel = freeFoodService.subscribeToPostChanges(() => {
       loadPosts();
     });
 
+    // Real-time subscription for request status changes (e.g. poster confirms)
+    const reqChannel = require('../config/supabase').supabase
+      .channel('free-food-my-requests')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'free_food_requests',
+      }, (payload) => {
+        if (payload.new) {
+          setMyRequests((prev) => {
+            if (prev[payload.new.post_id]) {
+              const updated = { ...prev, [payload.new.post_id]: payload.new };
+              if (payload.new.status === 'confirmed' && payload.old?.status === 'pending') {
+                setConfirmationCode(payload.new.confirmation_code);
+              }
+              if (payload.new.status === 'declined' && payload.old?.status === 'pending') {
+                Alert.alert('Spots Filled', 'Sorry, all spots for this food have been claimed. Better luck next time!');
+              }
+              return updated;
+            }
+            return prev;
+          });
+        }
+      })
+      .subscribe();
+
     return () => {
       subscription.unsubscribe();
       channel?.unsubscribe();
+      reqChannel?.unsubscribe();
     };
   }, [loadPosts, loadSubscription]);
+
+  // Scroll to focused post when navigated from notification
+  useEffect(() => {
+    if (route?.params?.focusPostId && posts.length > 0) {
+      const idx = posts.findIndex(p => p.id === route.params.focusPostId);
+      if (idx >= 0) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewOffset: 20 });
+        }, 300);
+      }
+    }
+  }, [route?.params?.focusPostId, posts]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -205,6 +283,102 @@ export default function FreeFoodScreen({ navigation }) {
     setSelectedLocation(null);
     setCustomDetail('');
     setExpirationMins(120);
+    setImageUri(null);
+  }, []);
+
+  const pickImage = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photos to add an image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setImageUri(result.assets[0].uri);
+    }
+  }, []);
+
+  const takePhoto = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow camera access to take a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setImageUri(result.assets[0].uri);
+    }
+  }, []);
+
+  const openAcceptModal = useCallback((postId) => {
+    setAcceptModalPostId(postId);
+    setAcceptPartySize(1);
+    setAcceptEta(null);
+    setAcceptDietaryNotes('');
+  }, []);
+
+  const closeAcceptModal = useCallback(() => {
+    setAcceptModalPostId(null);
+  }, []);
+
+  const handleAcceptSubmit = useCallback(async () => {
+    if (!acceptModalPostId) return;
+    setAcceptSubmitting(true);
+    try {
+      const req = await freeFoodService.requestFood(acceptModalPostId, {
+        partySize: acceptPartySize,
+        eta: acceptEta,
+        dietaryNotes: acceptDietaryNotes.trim() || null,
+      });
+      setMyRequests((prev) => ({ ...prev, [acceptModalPostId]: req }));
+      setAcceptModalPostId(null);
+      // Don't show confirmation code yet — wait for the poster to confirm
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to request.');
+    } finally {
+      setAcceptSubmitting(false);
+    }
+  }, [acceptModalPostId, acceptPartySize, acceptEta, acceptDietaryNotes]);
+
+  const handleLoadRequests = useCallback(async (postId) => {
+    if (expandedRequests === postId) {
+      setExpandedRequests(null);
+      return;
+    }
+    setExpandedRequests(postId);
+    try {
+      const reqs = await freeFoodService.getRequests(postId);
+      setPostRequests((prev) => ({ ...prev, [postId]: reqs }));
+    } catch {}
+  }, [expandedRequests]);
+
+  const handleConfirmRequest = useCallback(async (requestId, postId) => {
+    try {
+      await freeFoodService.confirmRequest(requestId);
+      const reqs = await freeFoodService.getRequests(postId);
+      setPostRequests((prev) => ({ ...prev, [postId]: reqs }));
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to confirm.');
+    }
+  }, []);
+
+  const handleDeclineRequest = useCallback(async (requestId, postId) => {
+    try {
+      await freeFoodService.declineRequest(requestId);
+      const reqs = await freeFoodService.getRequests(postId);
+      setPostRequests((prev) => ({ ...prev, [postId]: reqs }));
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to decline.');
+    }
   }, []);
 
   const handleSubmit = useCallback(async () => {
@@ -216,11 +390,20 @@ export default function FreeFoodScreen({ navigation }) {
       Alert.alert('Missing Info', 'Please select a location.');
       return;
     }
+    if (!imageUri) {
+      Alert.alert('Photo Required', 'Please add a photo of the food so people know what to expect.');
+      return;
+    }
 
     setSubmitting(true);
     try {
       const expiresAt = new Date(Date.now() + expirationMins * 60000).toISOString();
       const foodTypeObj = FOOD_TYPES.find((f) => f.id === foodType);
+
+      let uploadedImageUrl = null;
+      if (imageUri) {
+        uploadedImageUrl = await freeFoodService.uploadFoodImage(imageUri);
+      }
 
       await freeFoodService.createPost({
         title: title.trim(),
@@ -232,6 +415,7 @@ export default function FreeFoodScreen({ navigation }) {
         custom_location_detail: customDetail.trim() || null,
         emoji: foodTypeObj?.emoji || '\u{1F355}',
         expires_at: expiresAt,
+        image_url: uploadedImageUrl,
       });
 
       setShowModal(false);
@@ -242,73 +426,214 @@ export default function FreeFoodScreen({ navigation }) {
     } finally {
       setSubmitting(false);
     }
-  }, [title, description, foodType, selectedLocation, customDetail, expirationMins, resetForm, loadPosts]);
+  }, [title, description, foodType, selectedLocation, customDetail, expirationMins, imageUri, resetForm, loadPosts]);
 
   const renderPostCard = useCallback(({ item: post }) => {
     const isOwner = currentUserId === post.posted_by;
     const posterName = post.poster?.display_name || post.poster?.username || 'Someone';
+    const myRequest = myRequests[post.id];
+    const isExpanded = expandedRequests === post.id;
+    const reqs = postRequests[post.id] || [];
+
+    const countdown = getCountdown(post.expires_at);
+    const foodLabel = FOOD_TYPES.find((f) => f.id === post.food_type)?.label || post.food_type;
+    const isCardExpanded = expandedPostId === post.id;
 
     return (
-      <View style={styles.postCard}>
-        <View style={styles.postHeader}>
-          <View style={styles.postEmojiWrap}>
-            <Text style={styles.postEmoji}>{post.emoji || '\u{1F355}'}</Text>
-          </View>
-          <View style={styles.postHeaderText}>
-            <Text style={styles.postTitle} numberOfLines={1}>{post.title}</Text>
-            <Text style={styles.postPoster} numberOfLines={1}>by {posterName}</Text>
-          </View>
-          <View style={styles.postTimeBadge}>
-            <Text style={styles.postTimeText}>{getRelativeTime(post.created_at)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.postLocationRow}>
-          <MapPin size={13} color={colors.accent} />
-          <Text style={styles.postLocationText} numberOfLines={1}>
-            {post.location_name}
-            {post.custom_location_detail ? ` \u2022 ${post.custom_location_detail}` : ''}
-          </Text>
-        </View>
-
-        <View style={styles.postMetaRow}>
-          <View style={styles.foodTypeBadge}>
-            <Text style={styles.foodTypeBadgeText}>
-              {FOOD_TYPES.find((f) => f.id === post.food_type)?.label || post.food_type}
-            </Text>
-          </View>
-          <View style={styles.countdownBadge}>
-            <Clock size={11} color="#F59E0B" />
-            <Text style={styles.countdownText}>{getCountdown(post.expires_at)}</Text>
-          </View>
-        </View>
-
-        {post.description ? (
-          <Text style={styles.postDescription} numberOfLines={2}>{post.description}</Text>
-        ) : null}
-
-        <View style={styles.postActions}>
-          <TouchableOpacity
-            style={styles.directionsBtn}
-            onPress={() => handleGetDirections(post)}
-          >
-            <Navigation size={14} color="#FFF" />
-            <Text style={styles.directionsBtnText}>Get Directions</Text>
-          </TouchableOpacity>
-
-          {isOwner && (
-            <TouchableOpacity
-              style={styles.goneBtn}
-              onPress={() => handleDeactivate(post.id)}
-            >
-              <X size={14} color={colors.error} />
-              <Text style={styles.goneBtnText}>Mark as Gone</Text>
-            </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.postCard}
+        activeOpacity={0.9}
+        onPress={() => setExpandedPostId(isCardExpanded ? null : post.id)}
+      >
+        {/* Compact card — food image as background */}
+        <View style={styles.cardPreview}>
+          {post.image_url && (
+            <Image source={{ uri: post.image_url }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
           )}
+          <LinearGradient colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.75)']} style={StyleSheet.absoluteFillObject} />
+          <View style={styles.cardPreviewTop}>
+            <View style={styles.countdownChip}>
+              <Clock size={10} color="#FFF" />
+              <Text style={styles.countdownChipText}>{countdown}</Text>
+            </View>
+            {isOwner && (
+              <View style={styles.ownerTag}>
+                <Text style={styles.ownerTagText}>Your post</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.cardPreviewBottom}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{post.emoji || '\u{1F355}'} {post.title}</Text>
+            <View style={styles.cardSubRow}>
+              <MapPin size={11} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.cardLocation} numberOfLines={1}>{post.location_name}</Text>
+              <Text style={styles.cardDot}>{'\u00B7'}</Text>
+              <Text style={styles.cardPoster} numberOfLines={1}>{posterName}</Text>
+            </View>
+          </View>
         </View>
-      </View>
+
+        {/* Expanded details */}
+        {isCardExpanded && (
+          <View style={styles.expandedBody}>
+            {post.custom_location_detail && (
+              <View style={styles.detailRow}>
+                <MapPin size={12} color="#22C55E" />
+                <Text style={styles.detailText}>{post.custom_location_detail}</Text>
+              </View>
+            )}
+
+            <View style={styles.expandedBadgeRow}>
+              <View style={styles.foodTypeBadge}>
+                <Text style={styles.foodTypeBadgeText}>{foodLabel}</Text>
+              </View>
+              <Text style={styles.detailTime}>{getRelativeTime(post.created_at)}</Text>
+            </View>
+
+            {post.description ? (
+              <Text style={styles.postDescription}>{post.description}</Text>
+            ) : null}
+
+            <View style={styles.postActions}>
+              {!isOwner && (
+                <TouchableOpacity
+                  style={styles.directionsBtn}
+                  onPress={() => handleGetDirections(post)}
+                >
+                  <Navigation size={13} color="#FFF" />
+                  <Text style={styles.directionsBtnText}>Directions</Text>
+                </TouchableOpacity>
+              )}
+
+              {!isOwner && (
+                myRequest ? (
+                  myRequest.status === 'confirmed' ? (
+                    <TouchableOpacity
+                      style={styles.confirmCodeBadge}
+                      onPress={() => setConfirmationCode(myRequest.confirmation_code)}
+                    >
+                      <Check size={13} color="#FFF" />
+                      <Text style={styles.confirmCodeBadgeText}>
+                        {myRequest.confirmation_code || 'Confirmed'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={myRequest.status === 'declined' ? styles.declinedBadge : styles.pendingBadge}>
+                      {myRequest.status === 'declined' ? (
+                        <X size={13} color={colors.error} />
+                      ) : (
+                        <Clock size={13} color="#F59E0B" />
+                      )}
+                      <Text style={myRequest.status === 'declined' ? styles.declinedBadgeText : styles.pendingBadgeText}>
+                        {myRequest.status === 'declined' ? 'Spots filled' : 'Pending...'}
+                      </Text>
+                    </View>
+                  )
+                ) : (
+                  <TouchableOpacity
+                    style={styles.comingBtn}
+                    onPress={() => openAcceptModal(post.id)}
+                  >
+                    <Text style={styles.comingBtnText}>I'm Coming!</Text>
+                  </TouchableOpacity>
+                )
+              )}
+
+              {isOwner && (
+                <TouchableOpacity
+                  style={styles.goneBtn}
+                  onPress={() => handleDeactivate(post.id)}
+                >
+                  <X size={13} color={colors.error} />
+                  <Text style={styles.goneBtnText}>Mark as Gone</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Owner: request count + expandable list (inside expanded) */}
+        {isOwner && isCardExpanded && (
+          <TouchableOpacity style={styles.requestCountRow} onPress={() => handleLoadRequests(post.id)}>
+            <Text style={styles.requestCountText}>
+              {reqs.length > 0
+                ? (() => {
+                    const totalParty = reqs.reduce((sum, r) => sum + (r.party_size || 1), 0);
+                    return totalParty > reqs.length
+                      ? `${reqs.length} people (${totalParty} total) coming`
+                      : `${reqs.length} people coming`;
+                  })()
+                : 'See who\'s coming'}
+            </Text>
+            {isExpanded ? (
+              <ChevronUp size={16} color={colors.accent} />
+            ) : (
+              <ChevronDown size={16} color={colors.accent} />
+            )}
+          </TouchableOpacity>
+        )}
+
+        {isOwner && isExpanded && (
+          <View style={styles.requestsList}>
+            {reqs.length === 0 ? (
+              <Text style={styles.noRequestsText}>No requests yet</Text>
+            ) : (
+              reqs.map((req) => {
+                const rName = req.requester?.display_name || req.requester?.username || 'User';
+                const rInitials = rName.slice(0, 2).toUpperCase();
+                const rColor = req.requester?.avatar_color || '#6AADE4';
+                return (
+                  <View key={req.id} style={styles.requesterRow}>
+                    <View style={[styles.requesterAvatar, { backgroundColor: rColor }]}>
+                      <Text style={styles.requesterAvatarText}>{rInitials}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.requesterNameRow}>
+                        <Text style={styles.requesterName}>{rName}</Text>
+                        {(req.party_size || 1) > 1 && (
+                          <Text style={styles.requesterDetail}>{'\u{1F465}'} {req.party_size}</Text>
+                        )}
+                        {req.eta && (
+                          <Text style={styles.requesterDetail}>~{req.eta}</Text>
+                        )}
+                      </View>
+                      {req.dietary_notes ? (
+                        <Text style={styles.requesterDietary} numberOfLines={1}>{req.dietary_notes}</Text>
+                      ) : null}
+                      <View style={styles.requesterBottomRow}>
+                        <Text style={styles.requesterStatus}>
+                          {req.status === 'confirmed' ? 'Confirmed' : req.status === 'declined' ? 'Declined' : 'Pending'}
+                        </Text>
+                        {req.confirmation_code && (
+                          <Text style={styles.requesterCode}>{req.confirmation_code}</Text>
+                        )}
+                      </View>
+                    </View>
+                    {req.status === 'pending' && (
+                      <View style={styles.requesterActions}>
+                        <TouchableOpacity
+                          style={styles.confirmReqBtn}
+                          onPress={() => handleConfirmRequest(req.id, post.id)}
+                        >
+                          <UserCheck size={14} color="#22C55E" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.declineReqBtn}
+                          onPress={() => handleDeclineRequest(req.id, post.id)}
+                        >
+                          <UserX size={14} color={colors.error} />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
     );
-  }, [styles, colors, currentUserId, handleGetDirections, handleDeactivate]);
+  }, [styles, colors, currentUserId, handleGetDirections, handleDeactivate, myRequests, expandedPostId, expandedRequests, postRequests, openAcceptModal, handleLoadRequests, handleConfirmRequest, handleDeclineRequest]);
 
   const selectedFoodType = FOOD_TYPES.find((f) => f.id === foodType);
 
@@ -356,6 +681,7 @@ export default function FreeFoodScreen({ navigation }) {
 
       {/* Posts list */}
       <FlatList
+        ref={flatListRef}
         data={loading ? [] : posts}
         keyExtractor={(item) => item.id}
         renderItem={renderPostCard}
@@ -363,6 +689,11 @@ export default function FreeFoodScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={true}
         maxToRenderPerBatch={8}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+          }, 500);
+        }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         }
@@ -482,6 +813,28 @@ export default function FreeFoodScreen({ navigation }) {
                 maxLength={300}
               />
 
+              {/* Photo upload */}
+              <Text style={styles.fieldLabel}>Add a photo *</Text>
+              {imageUri ? (
+                <View style={styles.imagePreviewWrap}>
+                  <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                  <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => setImageUri(null)}>
+                    <X size={16} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.photoButtonsRow}>
+                  <TouchableOpacity style={styles.photoBtn} onPress={takePhoto}>
+                    <Camera size={18} color={colors.accent} />
+                    <Text style={styles.photoBtnText}>Camera</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.photoBtn} onPress={pickImage}>
+                    <ImageIcon size={18} color={colors.accent} />
+                    <Text style={styles.photoBtnText}>Gallery</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Expiration */}
               <Text style={styles.fieldLabel}>Estimated availability</Text>
               <View style={styles.chipRow}>
@@ -527,6 +880,106 @@ export default function FreeFoodScreen({ navigation }) {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Accept Form Modal */}
+      <Modal visible={!!acceptModalPostId} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>I'm Coming!</Text>
+              <TouchableOpacity onPress={closeAcceptModal}>
+                <X size={22} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {/* Party size stepper */}
+              <Text style={styles.fieldLabel}>Party size</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, acceptPartySize <= 1 && styles.stepperBtnDisabled]}
+                  onPress={() => setAcceptPartySize(Math.max(1, acceptPartySize - 1))}
+                  disabled={acceptPartySize <= 1}
+                >
+                  <Text style={styles.stepperBtnText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepperValue}>{acceptPartySize}</Text>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, acceptPartySize >= 5 && styles.stepperBtnDisabled]}
+                  onPress={() => setAcceptPartySize(Math.min(5, acceptPartySize + 1))}
+                  disabled={acceptPartySize >= 5}
+                >
+                  <Text style={styles.stepperBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* ETA chips */}
+              <Text style={styles.fieldLabel}>Estimated arrival</Text>
+              <View style={styles.chipRow}>
+                {ETA_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.chip, acceptEta === opt && styles.chipActive]}
+                    onPress={() => setAcceptEta(acceptEta === opt ? null : opt)}
+                  >
+                    <Text style={[styles.chipText, acceptEta === opt && styles.chipTextActive]}>
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Dietary notes */}
+              <Text style={styles.fieldLabel}>Any allergies or preferences? (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Nut allergy, vegetarian"
+                placeholderTextColor={colors.placeholder}
+                value={acceptDietaryNotes}
+                onChangeText={setAcceptDietaryNotes}
+                maxLength={200}
+              />
+
+              {/* Submit */}
+              <TouchableOpacity
+                style={[styles.acceptSubmitBtn, acceptSubmitting && styles.submitBtnDisabled]}
+                onPress={handleAcceptSubmit}
+                disabled={acceptSubmitting}
+              >
+                {acceptSubmitting ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.submitBtnText}>Confirm I'm Coming</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Confirmation Code Modal */}
+      <Modal visible={!!confirmationCode} animationType="fade" transparent>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmCheckCircle}>
+              <Check size={32} color="#FFF" />
+            </View>
+            <Text style={styles.confirmTitle}>You're confirmed!</Text>
+            <Text style={styles.confirmCodeDisplay}>{confirmationCode}</Text>
+            <Text style={styles.confirmHint}>Show this code to the food poster</Text>
+            <TouchableOpacity
+              style={styles.confirmDoneBtn}
+              onPress={() => setConfirmationCode(null)}
+            >
+              <Text style={styles.confirmDoneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <BottomNav navigation={navigation} activeTab="" />
     </LinearGradient>
   );
@@ -546,8 +999,8 @@ const createStyles = (colors) => StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: colors.inputBg,
     alignItems: 'center',
@@ -565,8 +1018,8 @@ const createStyles = (colors) => StyleSheet.create({
   headerEmoji: { fontSize: 22 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: colors.text },
   bellBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: colors.inputBg,
     alignItems: 'center',
@@ -590,87 +1043,113 @@ const createStyles = (colors) => StyleSheet.create({
 
   // Post card
   postCard: {
+    borderRadius: 16,
+    marginBottom: 10,
+    overflow: 'hidden',
     backgroundColor: colors.card,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    gap: 10,
   },
-  postHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+
+  // Compact preview with image background
+  cardPreview: {
+    height: 90,
+    justifyContent: 'space-between',
+    padding: 10,
+    backgroundColor: colors.inputBg,
+  },
+  cardPreviewTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  countdownChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  countdownChipText: { fontSize: 10, fontWeight: '800', color: '#FFF' },
+  ownerTag: {
+    backgroundColor: 'rgba(65,143,222,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  ownerTagText: { fontSize: 10, fontWeight: '800', color: '#FFF', letterSpacing: 0.3 },
+  cardPreviewBottom: { gap: 2 },
+  cardTitle: { fontSize: 15, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  cardSubRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  cardLocation: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.85)', maxWidth: 140 },
+  cardDot: { fontSize: 10, color: 'rgba(255,255,255,0.5)' },
+  cardPoster: { fontSize: 11, fontWeight: '500', color: 'rgba(255,255,255,0.7)' },
+
+  // Expanded body
+  expandedBody: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  detailText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+  detailTime: { fontSize: 11, color: colors.textMuted },
+  expandedBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
   postEmojiWrap: {
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
     borderRadius: 14,
     backgroundColor: 'rgba(34,197,94,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   postEmoji: { fontSize: 22 },
-  postHeaderText: { flex: 1 },
-  postTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  postPoster: { fontSize: 12, fontWeight: '500', color: colors.textTertiary, marginTop: 1 },
-  postTimeBadge: {
+  postTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  postPoster: { fontSize: 12, fontWeight: '500', color: colors.textTertiary },
+
+  foodTypeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: colors.inputBg,
-  },
-  postTimeText: { fontSize: 11, fontWeight: '600', color: colors.textTertiary },
-
-  postLocationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  postLocationText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, flex: 1 },
-
-  postMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  foodTypeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
     backgroundColor: 'rgba(34,197,94,0.12)',
   },
-  foodTypeBadgeText: { fontSize: 11, fontWeight: '700', color: '#22C55E' },
-  countdownBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: 'rgba(245,158,11,0.12)',
-  },
-  countdownText: { fontSize: 11, fontWeight: '700', color: '#F59E0B' },
+  foodTypeBadgeText: { fontSize: 10, fontWeight: '700', color: '#22C55E' },
 
-  postDescription: { fontSize: 13, lineHeight: 18, color: colors.textSecondary },
+  postDescription: { fontSize: 12, lineHeight: 17, color: colors.textSecondary },
 
-  postActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  postActions: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4, paddingBottom: 8 },
   directionsBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
+    gap: 5,
+    paddingVertical: 9,
+    borderRadius: 10,
     backgroundColor: '#418FDE',
   },
-  directionsBtnText: { fontSize: 13, fontWeight: '700', color: '#FFF' },
+  directionsBtnText: { fontSize: 12, fontWeight: '700', color: '#FFF' },
   goneBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(239,68,68,0.12)',
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.2)',
+    borderColor: 'rgba(239,68,68,0.18)',
   },
-  goneBtnText: { fontSize: 13, fontWeight: '700', color: colors.error },
+  goneBtnText: { fontSize: 12, fontWeight: '700', color: colors.error },
 
   // Empty
   emptyState: { alignItems: 'center', paddingTop: 80, gap: 10 },
@@ -819,4 +1298,298 @@ const createStyles = (colors) => StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText: { fontSize: 16, fontWeight: '800', color: '#FFF' },
+
+  // Photo upload in modal
+  photoButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  photoBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  photoBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  imagePreviewWrap: {
+    position: 'relative',
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 160,
+    borderRadius: 14,
+  },
+  imageRemoveBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Accept/confirm flow
+  comingBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: '#22C55E',
+  },
+  comingBtnText: { fontSize: 12, fontWeight: '800', color: '#FFF' },
+  confirmCodeBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: '#22C55E',
+  },
+  confirmCodeBadgeText: { fontSize: 12, fontWeight: '800', color: '#FFF', letterSpacing: 0.5 },
+  pendingBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: 'rgba(245,158,11,0.12)',
+  },
+  pendingBadgeText: { fontSize: 12, fontWeight: '700', color: '#F59E0B' },
+  declinedBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+  },
+  declinedBadgeText: { fontSize: 12, fontWeight: '700', color: '#EF4444' },
+  requestCountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.cardBorder,
+    marginHorizontal: 14,
+  },
+  requestCountText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.accent,
+  },
+  requestsList: {
+    paddingTop: 6,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 6,
+  },
+  noRequestsText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  requesterRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  requesterAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  requesterAvatarText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  requesterNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  requesterName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  requesterDetail: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  requesterDietary: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  requesterBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  requesterStatus: {
+    fontSize: 11,
+    color: colors.textTertiary,
+  },
+  requesterCode: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#22C55E',
+    letterSpacing: 0.5,
+  },
+  requesterActions: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 2,
+  },
+  confirmReqBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  declineReqBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Accept form modal
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    paddingVertical: 8,
+  },
+  stepperBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnDisabled: {
+    opacity: 0.3,
+  },
+  stepperBtnText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  stepperValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.text,
+    minWidth: 30,
+    textAlign: 'center',
+  },
+  acceptSubmitBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: '#22C55E',
+    marginTop: 20,
+    marginBottom: 12,
+  },
+
+  // Confirmation code modal
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+  },
+  confirmCard: {
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    padding: 30,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 320,
+    gap: 12,
+  },
+  confirmCheckCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: colors.text,
+  },
+  confirmCodeDisplay: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#22C55E',
+    letterSpacing: 2,
+    paddingVertical: 8,
+  },
+  confirmHint: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  confirmDoneBtn: {
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: colors.buttonPrimary || '#418FDE',
+    marginTop: 8,
+  },
+  confirmDoneBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFF',
+  },
 });

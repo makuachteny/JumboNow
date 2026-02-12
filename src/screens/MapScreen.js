@@ -12,11 +12,12 @@ import {
   Keyboard,
   Linking,
   ActivityIndicator,
-  Platform,
   Animated,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from '../components/MapViewWrapper';
 import {
   Search,
   BookOpen,
@@ -32,9 +33,10 @@ import {
   Bike,
   Bus,
   RefreshCw,
-  CircleDot,
-  Layers,
-  Activity,
+  AlertCircle,
+  Info,
+  Clock,
+  ExternalLink,
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
@@ -151,6 +153,58 @@ const getTrafficLevel = (location) => {
 const PASSIO_API = 'https://passio3.com/www/mapGetData.php';
 const SYSTEM_ID = '6670';
 
+const SHUTTLE_SCHEDULES = {
+  'Davis Direct': {
+    days: 'Monday - Friday',
+    hours: '7:00 AM - 7:00 PM',
+    frequency: 'Every :00 and :30',
+    route: 'Campus Center (48 Professors Row) \u2194 Davis Square',
+    stops: ['Campus Center', 'Davis Square'],
+  },
+  'Davis All Stops': {
+    days: 'Daily',
+    hours: 'Mon-Wed: 7PM-11PM, Thu: 7PM-12AM, Fri: 7PM-2AM, Sat-Sun: 10AM-11PM',
+    frequency: 'Every :00 and :30',
+    route: 'Campus Center >> Carmichael >> Olin >> Davis Square',
+    stops: ['Campus Center', 'Carmichael', 'Olin', 'Davis Square'],
+  },
+  'Beacon Direct': {
+    days: 'Monday - Friday',
+    hours: '7:00 AM - 7:00 PM',
+    frequency: 'Every :00 and :30',
+    route: 'Campus Center \u2194 Beacon St',
+    stops: ['Campus Center', 'Beacon St'],
+  },
+  'SMFA': {
+    days: 'Monday - Friday',
+    hours: '7:00 AM - 7:00 PM',
+    frequency: 'Varies',
+    route: 'Campus Center \u2194 SMFA (230 Fenway)',
+    stops: ['Campus Center', 'SMFA'],
+  },
+  'SMFA After 7PM': {
+    days: 'Monday - Friday',
+    hours: '7:00 PM - 11:00 PM',
+    frequency: 'Varies',
+    route: 'SMFA Connected shuttle stops at SMFA and Beacon St',
+    stops: ['Campus Center', 'SMFA', 'Beacon St'],
+  },
+  'SMFA Weekend': {
+    days: 'Saturday - Sunday',
+    hours: '10:00 AM - 11:00 PM',
+    frequency: 'Varies',
+    route: 'SMFA Connected shuttle on weekend schedule',
+    stops: ['Campus Center', 'SMFA'],
+  },
+  'Tufts Shoppers Shuttle': {
+    days: 'Saturday',
+    hours: '11:00 AM - 5:00 PM',
+    frequency: 'Hourly',
+    route: 'Campus Center \u2194 Target / Trader Joe\'s',
+    stops: ['Campus Center', 'Target Plaza'],
+  },
+};
+
 async function fetchShuttleRoutes() {
   const res = await fetch(`${PASSIO_API}?getRoutes=1&deviceId=0`, {
     method: 'POST',
@@ -237,6 +291,18 @@ function formatDistance(meters) {
   return `${(meters / 1609.34).toFixed(1)} mi`;
 }
 
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Component
 // ═══════════════════════════════════════════════════════════════════
@@ -267,6 +333,9 @@ export default function MapScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [busRoutePath, setBusRoutePath] = useState(null);
   const [fetchingPath, setFetchingPath] = useState(false);
+  const [selectedBus, setSelectedBus] = useState(null);
+  const [alertDismissed, setAlertDismissed] = useState(false);
+  const [scheduleDismissed, setScheduleDismissed] = useState(false);
 
   // ── Shared navigation state ──
   const [navPath, setNavPath] = useState(null);
@@ -471,6 +540,30 @@ export default function MapScreen({ navigation, route }) {
     return buses.filter((b) => b.routeId === selectedRoute.myid);
   }, [buses, selectedRoute]);
 
+  // ETA + next stops info for each bus
+  const busDetails = useMemo(() => {
+    const map = {};
+    buses.forEach((bus) => {
+      const busLat = parseFloat(bus.latitude);
+      const busLon = parseFloat(bus.longitude);
+      const speedMph = parseFloat(bus.speed) || 12;
+      const speedMs = speedMph * 0.44704;
+      const stopsOnRoute = shuttleStops.filter((s) => s.routeIds?.includes(bus.routeId));
+      const sorted = stopsOnRoute
+        .map((s) => {
+          const d = haversineDistance(busLat, busLon, parseFloat(s.latitude), parseFloat(s.longitude));
+          const etaMins = Math.max(1, Math.round((d / speedMs) / 60));
+          return { name: s.name, dist: d, eta: etaMins, etaLabel: etaMins < 60 ? `${etaMins} min` : `${Math.floor(etaMins / 60)}h ${etaMins % 60}m` };
+        })
+        .sort((a, b) => a.dist - b.dist);
+      const nearest = sorted[0];
+      if (nearest && nearest.dist > 30) {
+        map[bus.busId] = { etaLabel: nearest.etaLabel, nextStop: nearest.name, nextStops: sorted.slice(0, 3) };
+      }
+    });
+    return map;
+  }, [buses, shuttleStops]);
+
   // Fetch road-following path when a shuttle route with active buses is selected
   useEffect(() => {
     if (!selectedRoute) {
@@ -609,6 +702,7 @@ export default function MapScreen({ navigation, route }) {
       cancelNavigation();
       setBusRoutePath(null);
       setSelectedRoute(null);
+      setSelectedBus(null);
       mapRef.current?.animateToRegion(TUFTS_REGION, 400);
     },
     [cancelNavigation]
@@ -622,7 +716,10 @@ export default function MapScreen({ navigation, route }) {
     ({ item }) => (
       <TouchableOpacity style={styles.searchItem} onPress={() => handleSearchSelect(item)}>
         <View style={[styles.searchItemIcon, { backgroundColor: getCategoryColor(item.category) + '18' }]}>
-          <Text style={styles.searchItemEmoji}>{item.emoji}</Text>
+          {(() => {
+            const Icon = CATEGORY_ICONS[item.category] || MapPin;
+            return <Icon size={16} color={getCategoryColor(item.category)} />;
+          })()}
         </View>
         <View style={styles.searchItemText}>
           <Text style={styles.searchItemName}>{item.name}</Text>
@@ -641,123 +738,185 @@ export default function MapScreen({ navigation, route }) {
   // ═══════════════════════════════════════════════════════════════
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={colors.statusBarStyle} />
 
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        provider={hasRealGoogleMapsKey ? PROVIDER_GOOGLE : undefined}
-        initialRegion={TUFTS_REGION}
-        showsUserLocation
-        showsMyLocationButton={false}
-        showsCompass={false}
-        showsPointsOfInterest
-        showsBuildings
-        showsIndoors
-        onPress={() => {
-          if (directionsTarget) {
-            setDirectionsTarget(null);
-            setSelectedLocation(null);
-            setSelectedStop(null);
-          } else {
-            toggleUI();
-          }
-        }}
-      >
-        {/* Walking navigation path */}
-        {navPath && navPath.coords.length >= 2 && (
-          <Polyline
-            coordinates={navPath.coords}
-            strokeColor="#4285F4"
-            strokeWidth={6}
-            lineJoin="round"
-            lineCap="round"
+      {Platform.OS === 'web' ? (
+        <View style={styles.map}>
+          <iframe
+            title="Tufts Campus Map"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${TUFTS_REGION.longitude - TUFTS_REGION.longitudeDelta/2},${TUFTS_REGION.latitude - TUFTS_REGION.latitudeDelta/2},${TUFTS_REGION.longitude + TUFTS_REGION.longitudeDelta/2},${TUFTS_REGION.latitude + TUFTS_REGION.latitudeDelta/2}&layer=mapnik`}
+            style={{ width: '100%', height: '100%', border: 'none' }}
           />
-        )}
+          {/* Web overlay for campus location list */}
+          {mode === 'campus' && displayedLocations.length > 0 && (
+            <View style={styles.webLocationList}>
+              <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+                {displayedLocations.map((loc) => {
+                  const traffic = getTrafficLevel(loc);
+                  return (
+                    <TouchableOpacity
+                      key={`web-loc-${loc.id}`}
+                      style={styles.webLocationItem}
+                      onPress={() => {
+                        setDirectionsTarget({ name: loc.name, lat: loc.lat, lng: loc.lng, emoji: loc.emoji, category: loc.category });
+                        setSelectedLocation(loc);
+                      }}
+                    >
+                      <View style={[styles.webLocIcon, { backgroundColor: getCategoryColor(loc.category) + '18' }]}>
+                        {(() => {
+                          const Icon = CATEGORY_ICONS[loc.category] || MapPin;
+                          return <Icon size={18} color={getCategoryColor(loc.category)} />;
+                        })()}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.webLocName}>{loc.name}</Text>
+                        <Text style={styles.webLocDesc} numberOfLines={1}>{loc.description}</Text>
+                      </View>
+                      {traffic && (
+                        <View style={[styles.webLocTraffic, { backgroundColor: traffic.color + '18' }]}>
+                          <Text style={[styles.webLocTrafficText, { color: traffic.color }]}>{traffic.label}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+      ) : (
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          provider={hasRealGoogleMapsKey ? PROVIDER_GOOGLE : undefined}
+          initialRegion={TUFTS_REGION}
+          showsUserLocation
+          showsMyLocationButton={false}
+          showsCompass={false}
+          showsPointsOfInterest
+          showsBuildings
+          showsIndoors
+          onPress={() => {
+            if (directionsTarget) {
+              setDirectionsTarget(null);
+              setSelectedLocation(null);
+              setSelectedStop(null);
+            } else {
+              toggleUI();
+            }
+          }}
+        >
+          {/* Walking navigation path */}
+          {navPath && navPath.coords.length >= 2 && (
+            <Polyline
+              coordinates={navPath.coords}
+              strokeColor="#4285F4"
+              strokeWidth={6}
+              lineJoin="round"
+              lineCap="round"
+            />
+          )}
 
-        {/* Bus route path — only shown when bus is active */}
-        {busRoutePath && busRoutePath.coords.length >= 2 && (
-          <Polyline
-            coordinates={busRoutePath.coords}
-            strokeColor={busRoutePath.color}
-            strokeWidth={5}
-            lineJoin="round"
-            lineCap="round"
-          />
-        )}
+          {/* Bus route path — only shown when bus is active */}
+          {busRoutePath && busRoutePath.coords.length >= 2 && (
+            <Polyline
+              coordinates={busRoutePath.coords}
+              strokeColor={busRoutePath.color}
+              strokeWidth={5}
+              lineJoin="round"
+              lineCap="round"
+            />
+          )}
 
-        {/* Campus markers — all buildings in campus mode */}
-        {mode === 'campus' &&
-          displayedLocations.map((loc) => {
-            const traffic = getTrafficLevel(loc);
-            const isBusy = traffic && traffic.level >= 50;
+          {/* Campus markers — all buildings in campus mode */}
+          {mode === 'campus' &&
+            displayedLocations.map((loc) => {
+              const traffic = getTrafficLevel(loc);
+              const isBusy = traffic && traffic.level >= 50;
+              return (
+                <Marker
+                  key={`loc-${loc.id}`}
+                  coordinate={{ latitude: loc.lat, longitude: loc.lng }}
+                  onPress={() => handleMarkerPress(loc)}
+                  anchor={{ x: 0.5, y: traffic ? 0.5 : 1 }}
+                >
+                  {traffic ? (
+                    <View style={styles.trafficDotContainer}>
+                      {isBusy && (
+                        <Animated.View
+                          style={[
+                            styles.trafficDotPulse,
+                            {
+                              backgroundColor: traffic.color,
+                              transform: [{ scale: pulseAnim }],
+                            },
+                          ]}
+                        />
+                      )}
+                      <View style={[styles.trafficDotInner, { backgroundColor: traffic.color }]} />
+                      <Text style={[styles.trafficDotLabel, { color: traffic.color }]}>
+                        {traffic.label}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View>
+                      <View style={[styles.marker, { backgroundColor: getCategoryColor(loc.category) }]}>
+                        {(() => {
+                          const Icon = CATEGORY_ICONS[loc.category] || MapPin;
+                          return <Icon size={16} color="#FFF" />;
+                        })()}
+                      </View>
+                      <View style={[styles.markerArrow, { borderTopColor: getCategoryColor(loc.category) }]} />
+                    </View>
+                  )}
+                </Marker>
+              );
+            })}
+
+          {/* Shuttle stop markers */}
+          {mode === 'shuttle' &&
+            filteredStops.map((stop) => (
+              <Marker
+                key={`stop-${stop.stopId}`}
+                coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
+                onPress={() => handleStopPress(stop)}
+                anchor={{ x: 0.5, y: 0.5 }}
+              >
+                <View style={[styles.stopMarker, selectedStop?.stopId === stop.stopId && styles.stopMarkerSelected]}>
+                  <View style={[styles.stopDot, { backgroundColor: stop.color || colors.accent }]} />
+                </View>
+              </Marker>
+            ))}
+
+          {/* Bus markers — always visible when buses exist */}
+          {buses.map((bus) => {
+            const detail = busDetails[bus.busId];
             return (
               <Marker
-                key={`loc-${loc.id}`}
-                coordinate={{ latitude: loc.lat, longitude: loc.lng }}
-                onPress={() => handleMarkerPress(loc)}
-                anchor={{ x: 0.5, y: traffic ? 0.5 : 1 }}
+                key={`bus-${bus.busId}`}
+                coordinate={{ latitude: parseFloat(bus.latitude), longitude: parseFloat(bus.longitude) }}
+                anchor={{ x: 0.5, y: 0.3 }}
+                flat
+                onPress={() => setSelectedBus(bus)}
               >
-                {traffic ? (
-                  <View style={styles.trafficDotContainer}>
-                    {isBusy && (
-                      <Animated.View
-                        style={[
-                          styles.trafficDotPulse,
-                          {
-                            backgroundColor: traffic.color,
-                            transform: [{ scale: pulseAnim }],
-                          },
-                        ]}
-                      />
-                    )}
-                    <View style={[styles.trafficDotInner, { backgroundColor: traffic.color }]} />
-                    <Text style={[styles.trafficDotLabel, { color: traffic.color }]}>
-                      {traffic.label}
-                    </Text>
+                <View style={styles.busMarkerWrap}>
+                  <View style={[styles.busMarker, { backgroundColor: bus.color || colors.accent }]}>
+                    <Bus size={16} color="#FFF" />
                   </View>
-                ) : (
-                  <View>
-                    <View style={[styles.marker, { backgroundColor: getCategoryColor(loc.category) }]}>
-                      <Text style={styles.markerEmoji}>{loc.emoji}</Text>
+                  <View style={[styles.busNameBadge, { backgroundColor: bus.color || colors.accent }]}>
+                    <Text style={styles.busNameText} numberOfLines={1}>{bus.busName || bus.busId}</Text>
+                  </View>
+                  {detail && (
+                    <View style={styles.busEtaBadge}>
+                      <Text style={styles.busEtaText}>{detail.etaLabel}</Text>
                     </View>
-                    <View style={[styles.markerArrow, { borderTopColor: getCategoryColor(loc.category) }]} />
-                  </View>
-                )}
+                  )}
+                </View>
               </Marker>
             );
           })}
-
-        {/* Shuttle stop markers */}
-        {mode === 'shuttle' &&
-          filteredStops.map((stop) => (
-            <Marker
-              key={`stop-${stop.stopId}`}
-              coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
-              onPress={() => handleStopPress(stop)}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <View style={[styles.stopMarker, selectedStop?.stopId === stop.stopId && styles.stopMarkerSelected]}>
-                <View style={[styles.stopDot, { backgroundColor: stop.color || colors.accent }]} />
-              </View>
-            </Marker>
-          ))}
-
-        {/* Bus markers — always visible when buses exist */}
-        {buses.map((bus) => (
-          <Marker
-            key={`bus-${bus.busId}`}
-            coordinate={{ latitude: parseFloat(bus.latitude), longitude: parseFloat(bus.longitude) }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            rotation={parseFloat(bus.calculatedCourse) || 0}
-            flat
-          >
-            <View style={[styles.busMarker, { backgroundColor: bus.color || colors.accent }]}>
-              <Bus size={16} color="#FFF" />
-            </View>
-          </Marker>
-        ))}
-      </MapView>
+        </MapView>
+      )}
 
       {/* ─── Top bar ─── */}
       <Animated.View style={[styles.topBar, { paddingTop: insets.top + 8, opacity: uiAnim }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
@@ -883,20 +1042,26 @@ export default function MapScreen({ navigation, route }) {
         </Animated.View>
       )}
 
-      {/* ─── Shuttle mode: route pills ─── */}
+      {/* ─── Shuttle mode: compact route pills ─── */}
       {mode === 'shuttle' && (
         <Animated.View style={[styles.categoryBar, { top: insets.top + 108, opacity: uiAnim }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
             <TouchableOpacity
-              style={[styles.routePill, !selectedRoute && styles.routePillActive]}
+              style={[styles.routePillSmall, !selectedRoute && styles.routePillSmallActive]}
               onPress={() => {
                 setSelectedRoute(null);
                 setSelectedStop(null);
+                setSelectedBus(null);
                 setBusRoutePath(null);
                 cancelNavigation();
               }}
             >
-              <Text style={[styles.routePillText, !selectedRoute && styles.routePillTextActive]}>All Routes</Text>
+              <Text style={[styles.routePillSmallText, !selectedRoute && styles.routePillSmallTextActive]}>All</Text>
+              {buses.length > 0 && (
+                <View style={[styles.routePillSmallBadge, { backgroundColor: !selectedRoute ? 'rgba(255,255,255,0.3)' : colors.accent + '20' }]}>
+                  <Text style={[styles.routePillSmallBadgeText, { color: !selectedRoute ? '#FFF' : colors.accent }]}>{buses.length}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             {shuttleRoutes.map((route) => {
               const isActive = selectedRoute?.myid === route.myid;
@@ -904,30 +1069,25 @@ export default function MapScreen({ navigation, route }) {
               return (
                 <TouchableOpacity
                   key={route.myid}
-                  style={[styles.routePill, isActive && { backgroundColor: route.color }]}
+                  style={[styles.routePillSmall, isActive && { backgroundColor: route.color }, !isActive && busCount === 0 && { opacity: 0.5 }]}
                   onPress={() => {
                     setSelectedRoute(isActive ? null : route);
                     setSelectedStop(null);
+                    setSelectedBus(null);
+                    setScheduleDismissed(false);
                     if (isActive) {
                       setBusRoutePath(null);
                       cancelNavigation();
                     }
                   }}
                 >
-                  <View style={[styles.routeColorDot, { backgroundColor: isActive ? '#FFF' : route.color }]} />
-                  <Text style={[styles.routePillText, isActive && styles.routePillTextActive]} numberOfLines={1}>
+                  <View style={[styles.routePillSmallDot, { backgroundColor: isActive ? '#FFF' : route.color }]} />
+                  <Text style={[styles.routePillSmallText, isActive && styles.routePillSmallTextActive]} numberOfLines={1}>
                     {route.name}
                   </Text>
                   {busCount > 0 && (
-                    <View
-                      style={[
-                        styles.busCountBadge,
-                        { backgroundColor: isActive ? 'rgba(255,255,255,0.3)' : route.color + '20' },
-                      ]}
-                    >
-                      <Text style={[styles.busCountText, { color: isActive ? '#FFF' : route.color }]}>
-                        {busCount}
-                      </Text>
+                    <View style={[styles.routePillSmallBadge, { backgroundColor: isActive ? 'rgba(255,255,255,0.3)' : route.color + '20' }]}>
+                      <Text style={[styles.routePillSmallBadgeText, { color: isActive ? '#FFF' : route.color }]}>{busCount}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -936,6 +1096,77 @@ export default function MapScreen({ navigation, route }) {
           </ScrollView>
         </Animated.View>
       )}
+
+      {/* ─── Shuttle: alert banner ─── */}
+      {mode === 'shuttle' && !alertDismissed && (
+        <View style={[styles.alertBanner, { top: insets.top + 148 }]}>
+          <AlertCircle size={14} color="#B45309" />
+          <Text style={styles.alertBannerText}>University Holiday Schedule may affect service hours</Text>
+          <TouchableOpacity onPress={() => setAlertDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <X size={14} color="#B45309" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ─── Shuttle: bus detail popup ─── */}
+      {selectedBus && (() => {
+        const detail = busDetails[selectedBus.busId];
+        const busColor = selectedBus.color || colors.accent;
+        const speed = parseFloat(selectedBus.speed) || 0;
+        return (
+          <View style={[styles.busPopup, { paddingBottom: Math.max(insets.bottom, 16) + 70 }]}>
+            <View style={styles.dragHandle} />
+            <View style={styles.busPopupHeader}>
+              <View style={[styles.busPopupIcon, { backgroundColor: busColor }]}>
+                <Bus size={20} color="#FFF" />
+              </View>
+              <View style={styles.busPopupInfo}>
+                <Text style={styles.busPopupTitle}>Bus {selectedBus.busName}</Text>
+                <Text style={styles.busPopupRoute} numberOfLines={1}>{selectedBus.route || 'Unknown Route'}</Text>
+              </View>
+              <TouchableOpacity style={styles.busPopupClose} onPress={() => setSelectedBus(null)}>
+                <X size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.busPopupMeta}>
+              <View style={styles.busPopupMetaItem}>
+                <View style={[styles.liveDotSmall, { backgroundColor: '#22C55E' }]} />
+                <Text style={styles.busPopupMetaText}>Live</Text>
+              </View>
+              {speed > 0 && (
+                <View style={styles.busPopupMetaItem}>
+                  <Text style={styles.busPopupMetaText}>{speed.toFixed(1)} mph</Text>
+                </View>
+              )}
+              {detail && (
+                <View style={styles.busPopupMetaItem}>
+                  <Text style={[styles.busPopupMetaText, { color: busColor, fontWeight: '700' }]}>{detail.etaLabel} to next</Text>
+                </View>
+              )}
+            </View>
+            {detail && detail.nextStops.length > 0 && (
+              <View style={styles.busPopupStops}>
+                <Text style={styles.busPopupStopsLabel}>Upcoming stops</Text>
+                {detail.nextStops.map((stop, idx) => {
+                  const isNext = idx === 0;
+                  return (
+                    <View key={stop.name} style={styles.busPopupStopRow}>
+                      <View style={styles.busPopupStopDotCol}>
+                        <View style={[styles.busPopupStopDot, { backgroundColor: isNext ? busColor : '#D1D5DB' }]} />
+                        {idx < detail.nextStops.length - 1 && <View style={styles.busPopupStopLine} />}
+                      </View>
+                      <Text style={[styles.busPopupStopName, isNext && { fontWeight: '700', color: '#1A1A2E' }]} numberOfLines={1}>{stop.name}</Text>
+                      <View style={[styles.busPopupStopEta, { backgroundColor: isNext ? busColor + '15' : '#F3F4F6' }]}>
+                        <Text style={[styles.busPopupStopEtaText, { color: isNext ? busColor : '#6B7280' }]}>{stop.etaLabel}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        );
+      })()}
 
       {/* ─── Fetching path indicator ─── */}
       {fetchingPath && (
@@ -1038,42 +1269,90 @@ export default function MapScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* ─── Shuttle: active bus info cards ─── */}
-      {mode === 'shuttle' && buses.length > 0 && !selectedStop && !navigating && (
-        <View style={[styles.busInfoBar, { bottom: Math.max(insets.bottom, 16) + 70 }]}>
-          {filteredBuses.slice(0, 3).map((bus) => (
-            <TouchableOpacity
-              key={bus.busId}
-              style={styles.busInfoCard}
-              onPress={() =>
-                mapRef.current?.animateToRegion(
-                  {
-                    latitude: parseFloat(bus.latitude),
-                    longitude: parseFloat(bus.longitude),
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                  },
-                  300
-                )
-              }
-            >
-              <View style={[styles.busInfoIcon, { backgroundColor: bus.color || colors.accent }]}>
-                <Bus size={14} color="#FFF" />
+      {/* ─── Shuttle: route schedule panel (when a route is selected) ─── */}
+      {mode === 'shuttle' && selectedRoute && !navigating && !selectedStop && !scheduleDismissed && (() => {
+        const schedule = SHUTTLE_SCHEDULES[selectedRoute.name] || null;
+        const activeBusCount = filteredBuses.length;
+        const routeColor = selectedRoute.color || colors.accent;
+        return (
+          <View style={[styles.schedulePanel, { paddingBottom: Math.max(insets.bottom, 16) + 70 }]}>
+            <View style={styles.dragHandle} />
+            <View style={styles.schedulePanelHeader}>
+              <View style={[styles.schedulePanelAccent, { backgroundColor: routeColor }]} />
+              <View style={styles.schedulePanelHeaderInfo}>
+                <Text style={styles.schedulePanelTitle}>{selectedRoute.name}</Text>
+                <View style={styles.schedulePanelBadgeRow}>
+                  <View style={[styles.schedulePanelBusCountBadge, { backgroundColor: activeBusCount > 0 ? '#22C55E18' : '#EF444418' }]}>
+                    <Bus size={12} color={activeBusCount > 0 ? '#22C55E' : '#EF4444'} />
+                    <Text style={[styles.schedulePanelBusCountText, { color: activeBusCount > 0 ? '#22C55E' : '#EF4444' }]}>
+                      {activeBusCount} active {activeBusCount === 1 ? 'bus' : 'buses'}
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.busInfoText}>
-                <Text style={styles.busInfoRoute} numberOfLines={1}>
-                  {bus.route}
-                </Text>
-                <Text style={styles.busInfoName}>Bus {bus.busName}</Text>
+              <TouchableOpacity
+                style={styles.cardClose}
+                onPress={() => setScheduleDismissed(true)}
+              >
+                <X size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            {schedule ? (
+              <ScrollView style={styles.scheduleContent} showsVerticalScrollIndicator={false}>
+                <View style={styles.scheduleRow}>
+                  <Info size={14} color="#6B7280" />
+                  <View style={styles.scheduleRowContent}>
+                    <Text style={styles.scheduleRowLabel}>Service Days</Text>
+                    <Text style={styles.scheduleRowValue}>{schedule.days}</Text>
+                  </View>
+                </View>
+                <View style={styles.scheduleRow}>
+                  <Clock size={14} color="#6B7280" />
+                  <View style={styles.scheduleRowContent}>
+                    <Text style={styles.scheduleRowLabel}>Hours</Text>
+                    <Text style={styles.scheduleRowValue}>{schedule.hours}</Text>
+                  </View>
+                </View>
+                <View style={styles.scheduleRow}>
+                  <RefreshCw size={14} color="#6B7280" />
+                  <View style={styles.scheduleRowContent}>
+                    <Text style={styles.scheduleRowLabel}>Frequency</Text>
+                    <Text style={styles.scheduleRowValue}>{schedule.frequency}</Text>
+                  </View>
+                </View>
+                <View style={styles.scheduleRow}>
+                  <Navigation size={14} color="#6B7280" />
+                  <View style={styles.scheduleRowContent}>
+                    <Text style={styles.scheduleRowLabel}>Route</Text>
+                    <Text style={styles.scheduleRowValue}>{schedule.route}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={[styles.liveTrackingBtn, { backgroundColor: routeColor }]}
+                  onPress={() => Linking.openURL(`https://passio3.com/tufts/routes`)}
+                >
+                  <ExternalLink size={14} color="#FFF" />
+                  <Text style={styles.liveTrackingBtnText}>Live Tracking on Passio GO</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <View style={styles.scheduleNoData}>
+                <Info size={16} color="#9CA3AF" />
+                <Text style={styles.scheduleNoDataText}>Schedule info not available for this route</Text>
+                <TouchableOpacity
+                  style={[styles.liveTrackingBtn, { backgroundColor: routeColor, marginTop: 12 }]}
+                  onPress={() => Linking.openURL(`https://passio3.com/tufts/routes`)}
+                >
+                  <ExternalLink size={14} color="#FFF" />
+                  <Text style={styles.liveTrackingBtnText}>View on Passio GO</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.busInfoLive}>
-                <View style={styles.liveDotSmall} />
-                <Text style={styles.busInfoLiveText}>Live</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+            )}
+          </View>
+        );
+      })()}
+
+      {/* Bus info cards removed — info is now in route pills */}
 
       {/* ─── Shuttle: no buses message ─── */}
       {mode === 'shuttle' && !shuttleLoading && buses.length === 0 && !shuttleError && !navigating && !selectedStop && (
@@ -1157,9 +1436,9 @@ const createStyles = (colors) =>
     liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
     liveText: { fontSize: 11, fontWeight: '500', color: '#6B7280' },
     actionBtn: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       backgroundColor: '#FFFFFFEE',
       alignItems: 'center',
       justifyContent: 'center',
@@ -1266,6 +1545,27 @@ const createStyles = (colors) =>
       elevation: 2,
     },
     routePillActive: { backgroundColor: colors.buttonPrimary },
+    // Compact route pills
+    routePillSmall: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: '#FFFFFFEE',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    routePillSmallActive: { backgroundColor: colors.buttonPrimary },
+    routePillSmallDot: { width: 6, height: 6, borderRadius: 3 },
+    routePillSmallText: { fontSize: 11, fontWeight: '600', color: '#374151', maxWidth: 100 },
+    routePillSmallTextActive: { color: '#FFF' },
+    routePillSmallBadge: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6 },
+    routePillSmallBadgeText: { fontSize: 9, fontWeight: '700' },
     routeColorDot: { width: 8, height: 8, borderRadius: 4 },
     routePillText: { fontSize: 13, fontWeight: '600', color: '#374151', maxWidth: 130 },
     routePillTextActive: { color: '#FFF' },
@@ -1363,6 +1663,9 @@ const createStyles = (colors) =>
     },
     stopMarkerSelected: { borderColor: colors.accent, borderWidth: 2.5, transform: [{ scale: 1.2 }] },
     stopDot: { width: 10, height: 10, borderRadius: 5 },
+    busMarkerWrap: {
+      alignItems: 'center',
+    },
     busMarker: {
       width: 32,
       height: 32,
@@ -1376,6 +1679,36 @@ const createStyles = (colors) =>
       shadowOpacity: 0.3,
       shadowRadius: 4,
       elevation: 5,
+    },
+    busNameBadge: {
+      marginTop: 2,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 6,
+    },
+    busNameText: {
+      color: '#FFF',
+      fontSize: 8,
+      fontWeight: '700',
+      maxWidth: 50,
+      textAlign: 'center',
+    },
+    busEtaBadge: {
+      marginTop: 1,
+      backgroundColor: '#FFFFFFEE',
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 6,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    busEtaText: {
+      color: '#374151',
+      fontSize: 8,
+      fontWeight: '700',
     },
 
     // Info card (shared)
@@ -1580,4 +1913,194 @@ const createStyles = (colors) =>
       marginBottom: 8,
     },
     viewMenuBtnText: { fontSize: 15, fontWeight: '700', color: '#FFF' },
+
+    // Route pill inactive state
+    routePillInactive: { opacity: 0.55 },
+    routePillInactiveText: { fontSize: 10, fontWeight: '600', color: '#9CA3AF', marginLeft: 2 },
+
+    // Alert banner
+    alertBanner: {
+      position: 'absolute',
+      left: 14,
+      right: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: '#FEF3C7',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    alertBannerText: { flex: 1, fontSize: 12, fontWeight: '500', color: '#92400E' },
+
+    // Bus detail popup (bottom sheet)
+    busPopup: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: '#FFFFFFFA',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
+      elevation: 10,
+    },
+    busPopupHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 },
+    busPopupIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    busPopupInfo: { flex: 1 },
+    busPopupTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E' },
+    busPopupRoute: { fontSize: 13, fontWeight: '500', color: '#6B7280', marginTop: 1 },
+    busPopupClose: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: '#F3F4F6',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    busPopupMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 12,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: '#F3F4F6',
+    },
+    busPopupMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    busPopupMetaText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
+    busPopupStops: { marginTop: 14 },
+    busPopupStopsLabel: { fontSize: 11, fontWeight: '600', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+    busPopupStopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
+    busPopupStopDotCol: { width: 12, alignItems: 'center' },
+    busPopupStopDot: { width: 8, height: 8, borderRadius: 4 },
+    busPopupStopLine: { width: 2, height: 16, marginTop: 2, backgroundColor: '#E5E7EB' },
+    busPopupStopName: { flex: 1, fontSize: 13, fontWeight: '500', color: '#374151' },
+    busPopupStopEta: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+    busPopupStopEtaText: { fontSize: 11, fontWeight: '700' },
+
+    // Route schedule panel
+    schedulePanel: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: '#FFFFFFF8',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      maxHeight: 380,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
+      elevation: 10,
+    },
+    schedulePanelHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 14,
+    },
+    schedulePanelAccent: {
+      width: 4,
+      height: 40,
+      borderRadius: 2,
+    },
+    schedulePanelHeaderInfo: { flex: 1 },
+    schedulePanelTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A2E' },
+    schedulePanelBadgeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    schedulePanelBusCountBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+    },
+    schedulePanelBusCountText: { fontSize: 12, fontWeight: '600' },
+    scheduleContent: { maxHeight: 220 },
+    scheduleRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: '#F3F4F6',
+    },
+    scheduleRowContent: { flex: 1 },
+    scheduleRowLabel: { fontSize: 11, fontWeight: '600', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5 },
+    scheduleRowValue: { fontSize: 14, fontWeight: '500', color: '#1A1A2E', marginTop: 2 },
+    liveTrackingBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 12,
+      marginTop: 14,
+      marginBottom: 8,
+    },
+    liveTrackingBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+    scheduleNoData: {
+      alignItems: 'center',
+      paddingVertical: 16,
+    },
+    scheduleNoDataText: { fontSize: 13, fontWeight: '500', color: '#9CA3AF', marginTop: 6 },
+
+    // Web-specific styles
+    webLocationList: {
+      position: 'absolute',
+      bottom: 80,
+      left: 16,
+      right: 16,
+      backgroundColor: '#FFFFFFFA',
+      borderRadius: 16,
+      padding: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
+      elevation: 4,
+    },
+    webLocationItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+    },
+    webLocIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    webLocName: { fontSize: 14, fontWeight: '600', color: '#1A1A2E' },
+    webLocDesc: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+    webLocTraffic: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+    },
+    webLocTrafficText: { fontSize: 11, fontWeight: '700' },
   });

@@ -1,6 +1,6 @@
 # JumboNow
 
-A full-featured campus app for Tufts University students. Discover events, connect with friends, track dining menus, find free food, navigate campus, and catch the shuttle — all in one place.
+A full-featured campus app for Tufts University students. Discover events, connect with friends, track dining menus, find free food, navigate campus, catch the shuttle, and access campus resources — all in one place.
 
 Built with React Native and Expo, powered by Supabase.
 
@@ -12,26 +12,33 @@ Built with React Native and Expo, powered by Supabase.
 
 - Browse and search campus events with full-text search
 - Filter by category (student orgs, arts, sports, academic, outdoors, greek life)
-- Filter by price (free/paid), time range (today, this week, this month)
-- Featured events carousel on the home screen
-- Create events with custom icons, colors, capacity limits, and ticket pricing
-- RSVP to free events or purchase tickets with confirmation codes
+- Quick filters: All Events, Friends' Events, This Week, Free, Student Orgs
+- Featured events carousel with poster images on the home screen
+- Create events with custom icons/logos, colors, capacity limits, and ticket pricing
+- Upload organization logos or choose from emoji icons when creating events
+- RSVP to free events or purchase tickets with cryptographically secure confirmation codes
+- QR code display on tickets for event check-in
 - Invite friends or entire friend groups to events
-- Rate and review events after attending
+- Rate and review events after attending (1-5 stars with feedback)
 - Trending search suggestions based on community activity
+- Persistent filter preferences across sessions
 
 ### Social
 
 - Add friends, accept/decline requests, view suggested friends
+- Discover tab shows all users on JumboNow who are not yet your friends, with local search filtering
 - Create named friend groups with custom icons and colors
 - Direct messaging with real-time delivery and read receipts
+- Group chat automatically created for each friend group
+- Share events directly in DM and group conversations
 - Notification feed for event invites, RSVPs, messages, and food alerts
-- User profiles with bio, major, graduation year, vibe score, and achievements
+- User profiles with bio, major, graduation year, and vibe score
 
 ### Dining
 
 - Real-time menus for all 11 Tufts dining locations via the Nutrislice API
-- Filter by type: Dining Halls, Cafes, Grab & Go
+- Real dining location logos from the Nutrislice API (not just emojis)
+- Filter by type: Dining Halls, Cafes, Grab & Go (equal-width button layout)
 - Live open/closed/closing-soon status
 - Meal period tabs (Breakfast, Lunch, Dinner, Late Night)
 - Expandable menu items with full nutrition info (calories, protein, carbs, fat, fiber, sodium)
@@ -43,37 +50,56 @@ Built with React Native and Expo, powered by Supabase.
 - Post and discover free food alerts across campus
 - Map view with food type categories (pizza, sandwiches, snacks, drinks, baked goods, fruit, full meal)
 - Custom emoji, location pin, and expiration timer per post
+- Photo upload support for food posts
+- Request-to-accept flow: users request food with party size, ETA, and dietary notes
+- Confirmation codes generated for accepted requests
+- Post owner can confirm or decline incoming requests with real-time notifications
 - Subscribe for real-time push banner notifications when new food is posted
 - Auto-expiry after 2 hours (configurable up to 3 hours)
+- Automatic notification cleanup when posts expire
+- Combined "Dining & Food" access in the FAB menu
 
-### Campus Map
+### Campus Map & Shuttle Tracker
 
 - Interactive map with 19 campus locations across 5 categories
 - Location categories: Libraries, Dining, Academic, Athletic, Residential
 - Estimated traffic/busyness levels by time of day
 - Walking directions with distance and duration via OSRM
 - "View Menu" button on dining locations links directly to that hall's menu
-
-### Shuttle Tracker
-
-- Live GPS positions of all active Tufts shuttles via the Passio GO API
-- Route filtering with color-coded pills and active bus count badges
+- **Shuttle mode** with live GPS tracking of all active Tufts shuttles via Passio GO API
+- Route filtering with color-coded pills, active bus count badges, and "Inactive" labels
 - Road-following route polylines rendered on the map
+- Bus detail popups showing bus name, route, and live speed
+- Route schedule panel with service days, hours, frequency, and route description
+- Hardcoded schedules for 7 shuttle routes (Davis Direct, Davis All Stops, Beacon Direct, SMFA, etc.)
 - Stop markers with tap-to-select and walking directions
 - 10-second auto-refresh for real-time bus positions
-- Walking navigation overlay with distance and ETA
+- Dismissible alert banner for holiday schedule notices
+- "Live Tracking on Passio GO" external link button
 
-### Achievements
+### Campus Resources
 
-- Unlock achievements for milestones (first event, 5 saved events, first ticket, event creation, etc.)
-- Vibe score tracking based on engagement
-- Achievement badges displayed on profile
+- 15 campus resource tiles in the Profile screen (Campus tab)
+- Quick access to: Dining, Canvas, Tufts Shuttle, Health & Wellness, Be Safe, Fitness Center, Athletics, Apps & Software, Laundry, Parking, Technology, Free Food, Campus Map, Study Spaces, Reserve Tufts
+- In-app navigation for Dining, Shuttle, Free Food, and Map
+- External links open in browser for web-based resources
+- External link indicator badge on tiles
 
 ### Tickets
 
-- View all reservations and purchased tickets
-- Confirmation codes for event check-in
+- View all reservations and purchased tickets (Upcoming/Past tabs)
+- QR codes generated from confirmation codes for event check-in
+- Cryptographically secure 8-character confirmation codes
 - Rate events after attending (1-5 stars with optional feedback)
+- Apple Wallet integration button (iOS)
+- File type and size validation on all image uploads
+
+### Profile
+
+- User profile with avatar upload and color customization
+- Three content tabs: Activity, Campus Resources, About
+- Settings modal with dark mode toggle and logout
+- Vibe score tracking based on engagement
 
 ---
 
@@ -85,10 +111,11 @@ Built with React Native and Expo, powered by Supabase.
 | Navigation | React Navigation 7 (Native Stack) |
 | Backend | Supabase (PostgreSQL, Auth, Realtime, Storage, Edge Functions) |
 | Dining API | Nutrislice (no key required) |
-| Shuttle API | Passio GO |
+| Shuttle API | Passio GO (System ID: 6670) |
 | Routing | OSRM (free, no key required) |
 | Maps | react-native-maps with Google Maps provider |
 | Icons | lucide-react-native |
+| QR Codes | react-native-qrcode-svg |
 | Theme | Custom ThemeContext with dark/light mode |
 | Storage | AsyncStorage for local persistence |
 
@@ -103,7 +130,7 @@ JumboNow/
   package.json                    # Dependencies and scripts
   index.js                        # Entry point
   tsconfig.json                   # TypeScript configuration
-  jest.setup.js                   # Test setup
+  jest.setup.js                   # Test setup and mocks
 
   src/
     config/
@@ -115,10 +142,19 @@ JumboNow/
     components/
       BottomNav.js                # Tab bar (Map, Friends, Events, Tickets, Profile)
       FreeFoodBanner.js           # Real-time push banner for new free food alerts
+      SmartIcon.js                # Renders URL images or emoji text dynamically
+      MapViewWrapper.js           # Native map wrapper (iOS/Android)
+      MapViewWrapper.web.js       # Web-compatible map fallback
+
+    config/
+      clubLogos.js                # Club/organization logo URL mappings
 
     data/
       campusLocations.js          # 19 hardcoded campus locations with coordinates
-      diningLocations.js          # 11 dining hall slug mappings and Transact links
+      diningLocations.js          # 11 dining hall slugs, logos, and Transact links
+
+    hooks/
+      usePushNotifications.js     # Push notification registration and handling
 
     screens/
       LandingScreen.js            # Welcome screen with login/register options
@@ -130,29 +166,31 @@ JumboNow/
       HomeScreen.js               # Main feed: featured events, filters, FAB menu
       DiscoverScreen.js           # Search events with advanced filters
       EventDetailScreen.js        # Event details, RSVP/buy, invite, rate
-      CreateEventScreen.js        # Create event form
-      MyTicketsScreen.js          # Reservations and tickets with ratings
+      CreateEventScreen.js        # Create event form with logo/poster upload
+      MyTicketsScreen.js          # Reservations and tickets with QR codes
 
-      ProfileScreen.js            # User profile, stats, achievements, settings
-      FriendsScreen.js            # Friend list, requests, groups, search
+      ProfileScreen.js            # User profile, campus resources, settings
+      FriendsScreen.js            # Friends, requests, discover all users
       ChatScreen.js               # Direct messaging conversations
+      GroupChatScreen.js          # Group messaging for friend groups
       NotificationsScreen.js      # Notification feed
 
-      DiningScreen.js             # Dining locations list with filters
+      DiningScreen.js             # Dining locations list with button filters
       DiningMenuScreen.js         # Individual dining hall menu by meal period
       FreeFoodScreen.js           # Free food alert map and creation
-      MapScreen.js                # Interactive campus map with directions
-      ShuttleScreen.js            # Live shuttle tracker with walking nav
+      MapScreen.js                # Campus map + live shuttle tracker
+      CampusResourcesScreen.js    # Campus resources grid (standalone)
 
     services/
       auth.service.js             # Authentication (signup, login, profiles)
       events.service.js           # Events CRUD, search, RSVP, invitations
       tickets.service.js          # Reservations, purchases, ratings, wallet
-      friends.service.js          # Friendships, requests, search, suggestions
+      friends.service.js          # Friendships, requests, discover, search
       friendGroups.service.js     # Friend group CRUD and membership
-      chat.service.js             # Conversations and messages
+      chat.service.js             # DM conversations and messages
+      groupChat.service.js        # Group chat conversations and messages
       notifications.service.js    # Notification feed management
-      freefood.service.js         # Free food posts and subscriptions
+      freefood.service.js         # Free food posts, subscriptions, and request flow
       dining.service.js           # Nutrislice API integration
       achievements.service.js     # Achievement definitions and unlocking
       reports.service.js          # Content reporting
@@ -161,15 +199,15 @@ JumboNow/
     utils/
       safeColor.js                # Color validation utility
 
-    services/__tests__/           # Service unit tests
-    screens/__tests__/            # Screen component tests
+    services/__tests__/           # Service unit tests (auth, events, tickets, reports)
+    screens/__tests__/            # Screen component tests (MyTicketsScreen)
 
   supabase/
     config.toml                   # Supabase project configuration
-    migrations/                   # 22 SQL migrations (schema, RLS, functions, triggers, seeds)
+    migrations/                   # 25 SQL migrations (schema, RLS, functions, triggers, seeds)
 
   assets/                         # App icons, splash screen, images
-  scripts/                        # Utility scripts
+  scripts/                        # Utility scripts (OCL event scraper)
 ```
 
 ---
@@ -202,10 +240,11 @@ Landing --> Login -----> Home (authenticated)
 | CreateEvent | FAB menu on HomeScreen |
 | Chat | Chat icon on HomeScreen header |
 | Notifications | Bell icon on HomeScreen header |
-| Dining | FAB menu on HomeScreen |
+| GroupChat | Create or tap a group in FriendsScreen |
+| Dining | FAB menu on HomeScreen or Campus Resources |
 | DiningMenu | Tap a dining location or "View Menu" on MapScreen |
-| FreeFood | FAB menu on HomeScreen or push banner |
-| Shuttle | Shuttle icon on MapScreen |
+| FreeFood | FAB menu on HomeScreen or Campus Resources |
+| CampusResources | Profile screen Campus tab (standalone version) |
 
 ### Deep Links
 
@@ -220,6 +259,8 @@ Landing --> Login -----> Home (authenticated)
 | `jumbonow://freefood` | FreeFoodScreen |
 | `jumbonow://dining` | DiningScreen |
 | `jumbonow://dining/:slug` | DiningMenuScreen |
+| `jumbonow://groupchat/:groupConversationId` | GroupChatScreen |
+| `jumbonow://campus` | CampusResourcesScreen |
 
 ---
 
@@ -232,8 +273,8 @@ The entire backend: authentication, database, real-time subscriptions, file stor
 - **Auth**: Email/password signup and login, email verification, session management
 - **Database**: PostgreSQL with Row-Level Security on all tables
 - **Realtime**: Live updates for events, messages, notifications, free food posts, friendships
-- **Storage**: Profile image uploads (`avatars` bucket), event images (`event-images` bucket)
-- **Edge Functions**: Wallet pass generation (planned)
+- **Storage**: Profile image uploads (`avatars` bucket), event images and org logos (`event-images` bucket), free food images (`free-food-images` bucket)
+- **Edge Functions**: Push notifications (`send-push`), wallet pass generation (`wallet-pass`)
 
 ### Nutrislice (Dining Menus)
 
@@ -242,11 +283,11 @@ Public API, no key required.
 ```
 Base URL: https://tufts.api.nutrislice.com/menu/api
 
-GET /schools/?format=json                                          # All dining locations
+GET /schools/?format=json                                          # All dining locations + logos
 GET /weeks/school/{slug}/menu-type/{meal}/{year}/{month}/{day}/    # Menu for a day
 ```
 
-Returns: location hours, operating status, meal types, menu items with full nutrition, dietary icons, and ingredients.
+Returns: location hours, operating status, logos, meal types, menu items with full nutrition, dietary icons, and ingredients.
 
 **Caching**: Schools cached 1 hour, menus cached 30 minutes per location/meal/date.
 
@@ -258,8 +299,8 @@ Tufts shuttle real-time data.
 Base URL: https://passio3.com/www/mapGetData.php
 System ID: 6670
 
-POST ?getRoutes=1    # All shuttle routes
-POST ?getBuses=1     # Live bus GPS positions
+POST ?getRoutes=1    # All shuttle routes with names and colors
+POST ?getBuses=1     # Live bus GPS positions, headings, and speeds
 POST ?getStops=2     # All stops with route assignments
 ```
 
@@ -315,6 +356,9 @@ Supported locations: Hodgdon, Hotung, Commons, Late Night at Commons.
 | `user_achievements` | Unlocked achievements per user |
 | `search_logs` | Search queries for trending analysis |
 | `reports` | Content reports (events, users, messages, food posts) |
+| `group_conversations` | Group chat threads linked to friend groups |
+| `group_messages` | Individual messages in group chats |
+| `free_food_requests` | Request-to-accept flow for free food posts |
 
 ### Key Database Functions
 
@@ -348,6 +392,41 @@ Supported locations: Hodgdon, Hotung, Commons, Late Night at Commons.
 | Event invitation sent | Notify invitee |
 | Free food posted | Notify all subscribers |
 | Free food post created | Auto-set 2hr expiry if none specified |
+| Free food requested | Notify post owner |
+| Free food post expired | Clean up related notifications |
+| Friend group created | Auto-create group conversation |
+
+---
+
+## Testing
+
+```bash
+# Run all tests
+npm test
+
+# Tests: 5 suites, 24 tests
+# - auth.service.test.js: signup metadata, profile update allowlist, error handling
+# - events.service.test.js: friends events, create event retry, search sanitization
+# - tickets.service.test.js: wallet pass URL, session handling
+# - reports.service.test.js: input validation, type checking, auth requirement
+# - MyTicketsScreen.test.js: ticket count badges, Apple Wallet button visibility
+```
+
+---
+
+## Security
+
+- Profile update field allowlist prevents unauthorized field modifications
+- Search input sanitization strips special characters before database queries
+- Server-side rate limiting on all user actions via `check_rate_limit` RPC
+- Row-Level Security on all Supabase tables
+- Cryptographically secure confirmation codes using `crypto.getRandomValues`
+- Image upload validation: file type allowlist (jpg, jpeg, png, gif, webp) and size limits (5MB logos, 10MB posters)
+- HTTPS-only URL rendering in SmartIcon component
+- 5-second fetch timeouts on all external API calls via AbortController
+- UUID validation on friend suggestion queries
+- Content report validation (type, reason, details length)
+- `.env` excluded from git via `.gitignore`
 
 ---
 
@@ -416,7 +495,7 @@ cd supabase
 supabase db push
 ```
 
-Or apply manually via the Supabase SQL editor — migrations are numbered `00001` through `00022` in `supabase/migrations/`.
+Or apply manually via the Supabase SQL editor -- migrations are numbered `00001` through `00024` in `supabase/migrations/`.
 
 ---
 
@@ -455,13 +534,15 @@ All screens use `colors` from `useTheme()` and generate styles via `createStyles
 
 ## Architecture Decisions
 
-- **No external state library** — React Context + service layer pattern keeps things simple. Each service module manages its own Supabase queries and caching.
-- **In-memory caching** — Dining and shuttle data use time-based in-memory caches with configurable TTLs. Pull-to-refresh clears caches.
-- **Row-Level Security** — Every Supabase table has RLS policies. Users can only read/write their own data. Public data (events, profiles) is readable by all authenticated users.
-- **Rate limiting in the database** — A single `check_rate_limit` RPC function handles all rate limits, preventing abuse even if the client is modified.
-- **Atomic capacity enforcement** — Event reservations use `SELECT ... FOR UPDATE` row locking to prevent overselling, even under concurrent requests.
-- **Real-time subscriptions** — Supabase Realtime channels provide instant updates for messages, notifications, events, and free food without polling.
-- **5-second fetch timeouts** — All external API calls (Nutrislice, Passio GO) use AbortController with a 5-second timeout to prevent hanging.
+- **No external state library** -- React Context + service layer pattern keeps things simple. Each service module manages its own Supabase queries and caching.
+- **SmartIcon pattern** -- A universal component that detects if a value is a URL or emoji and renders the appropriate element (Image or Text). Used across all screens for event icons, dining logos, and organizer avatars.
+- **In-memory caching** -- Dining and shuttle data use time-based in-memory caches with configurable TTLs. Pull-to-refresh clears caches.
+- **Row-Level Security** -- Every Supabase table has RLS policies. Users can only read/write their own data. Public data (events, profiles) is readable by all authenticated users.
+- **Rate limiting in the database** -- A single `check_rate_limit` RPC function handles all rate limits, preventing abuse even if the client is modified.
+- **Atomic capacity enforcement** -- Event reservations use `SELECT ... FOR UPDATE` row locking to prevent overselling, even under concurrent requests.
+- **Real-time subscriptions** -- Supabase Realtime channels provide instant updates for messages, notifications, events, and free food without polling.
+- **5-second fetch timeouts** -- All external API calls (Nutrislice, Passio GO) use AbortController with a 5-second timeout to prevent hanging.
+- **Shuttle integrated into MapScreen** -- Rather than a separate ShuttleScreen, shuttle tracking lives inside MapScreen with a mode toggle, keeping the map context while switching between campus locations and live bus tracking.
 
 ---
 
@@ -480,9 +561,10 @@ All screens use `colors` from `useTheme()` and generate styles via `createStyles
 | `@react-native-async-storage/async-storage` | 2.2.0 | Local persistence |
 | `@react-native-community/datetimepicker` | ^8.6.0 | Date/time picker |
 | `react-native-maps` | 1.20.1 | Google Maps |
+| `react-native-qrcode-svg` | ^6.3.21 | QR code generation for tickets |
 | `react-native-safe-area-context` | ~5.6.0 | Safe area insets |
 | `react-native-screens` | ~4.16.0 | Native screen containers |
-| `react-native-svg` | 15.12.1 | SVG rendering (for icons) |
+| `react-native-svg` | 15.12.1 | SVG rendering (for icons and QR codes) |
 | `lucide-react-native` | ^0.563.0 | Icon library |
 | `expo-linear-gradient` | ~15.0.8 | Gradient backgrounds |
 | `expo-blur` | ~15.0.8 | iOS blur effects |

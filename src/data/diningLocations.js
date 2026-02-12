@@ -2,17 +2,17 @@
 // Slugs and active_menu_types sourced from the Nutrislice API
 
 export const DINING_LOCATIONS = [
-  { slug: 'dewick-dining', name: 'Dewick', emoji: '\u{1F372}', type: 'dining_hall', hasOrdering: false },
-  { slug: 'carmichael-dining-hall', name: 'Carm', emoji: '\u{1F35C}', type: 'dining_hall', hasOrdering: false },
-  { slug: 'hodgdon-food-on-the-run', name: 'Hodgdon', emoji: '\u{1F961}', type: 'grab_and_go', hasOrdering: true },
-  { slug: 'hotung-cafe', name: 'Hotung', emoji: '\u{2615}', type: 'cafe', hasOrdering: true },
-  { slug: 'commons-marketplace', name: 'Commons', emoji: '\u{1F6D2}', type: 'cafe', hasOrdering: true },
-  { slug: 'kindlevan-cafe', name: 'Kindlevan', emoji: '\u{2615}', type: 'cafe', hasOrdering: false },
-  { slug: 'pax-et-lox-glatt-kosher-deli', name: 'Pax et Lox', emoji: '\u{1F96A}', type: 'grab_and_go', hasOrdering: false },
-  { slug: 'tower-cafe', name: 'Tower Cafe', emoji: '\u{2615}', type: 'cafe', hasOrdering: false },
-  { slug: 'mugar-cafe', name: 'Mugar Cafe', emoji: '\u{2615}', type: 'cafe', hasOrdering: false },
-  { slug: 'late-night-at-commons', name: 'Late Night', emoji: '\u{1F319}', type: 'cafe', hasOrdering: true },
-  { slug: 'smfa', name: 'SMFA', emoji: '\u{1F3A8}', type: 'cafe', hasOrdering: false },
+  { slug: 'dewick-dining', name: 'Dewick', emoji: '\u{1F372}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397525', type: 'dining_hall', hasOrdering: false },
+  { slug: 'carmichael-dining-hall', name: 'Carm', emoji: '\u{1F35C}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397529', type: 'dining_hall', hasOrdering: false },
+  { slug: 'hodgdon-food-on-the-run', name: 'Hodgdon', emoji: '\u{1F961}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397531', type: 'grab_and_go', hasOrdering: true },
+  { slug: 'hotung-cafe', name: 'Hotung', emoji: '\u{2615}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397582', type: 'cafe', hasOrdering: true },
+  { slug: 'commons-marketplace', name: 'Commons', emoji: '\u{1F6D2}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397578', type: 'cafe', hasOrdering: true },
+  { slug: 'kindlevan-cafe', name: 'Kindlevan', emoji: '\u{2615}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397522', type: 'cafe', hasOrdering: false },
+  { slug: 'pax-et-lox-glatt-kosher-deli', name: 'Pax et Lox', emoji: '\u{1F96A}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397548', type: 'grab_and_go', hasOrdering: false },
+  { slug: 'tower-cafe', name: 'Tower Cafe', emoji: '\u{2615}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397586', type: 'cafe', hasOrdering: false },
+  { slug: 'mugar-cafe', name: 'Mugar Cafe', emoji: '\u{2615}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397530', type: 'cafe', hasOrdering: false },
+  { slug: 'late-night-at-commons', name: 'Late Night', emoji: '\u{1F319}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397704', type: 'cafe', hasOrdering: true },
+  { slug: 'smfa', name: 'SMFA', emoji: '\u{1F3A8}', image: 'https://api.nutrislice.com/content/asset/serve/image/jpg/397537', type: 'cafe', hasOrdering: false },
 ];
 
 export const DINING_CATEGORIES = [

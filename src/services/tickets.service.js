@@ -2,9 +2,11 @@ import { supabase } from '../config/supabase';
 
 function generateConfirmationCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
   let result = '';
   for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars.charAt(bytes[i] % chars.length);
   }
   return result;
 }
@@ -122,8 +124,8 @@ export const ticketsService = {
     const { data, error } = await supabase
       .from('event_reservations')
       .select(`
-        *,
-        event:events(*)
+        id, event_id, user_id, status, reservation_type, ticket_type, price_paid, confirmation_code, purchased_at, rating, feedback, rated_at,
+        event:events(id, title, subtitle, description, icon, color, gradient_colors, category, location, start_time, end_time, max_capacity, tags, energy, vibe, event_type, ticket_price, is_free, organizer_name, organizer_icon, image_url, is_featured, created_by)
       `)
       .eq('user_id', user.id)
       .order('purchased_at', { ascending: false });
@@ -132,10 +134,24 @@ export const ticketsService = {
   },
 
   async getEventAttendees(eventId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Verify the user is the event creator before exposing attendee data
+    const { data: event } = await supabase
+      .from('events')
+      .select('created_by')
+      .eq('id', eventId)
+      .single();
+
+    if (!event || event.created_by !== user.id) {
+      throw new Error('Only the event creator can view attendees.');
+    }
+
     const { data, error } = await supabase
       .from('event_reservations')
       .select(`
-        *,
+        id, event_id, user_id, status, reservation_type, ticket_type, price_paid, confirmation_code, purchased_at,
         profile:profiles!event_reservations_user_id_fkey(
           id, username, display_name, avatar_url, avatar_color
         )
@@ -148,7 +164,7 @@ export const ticketsService = {
       // Fallback: if the foreign key name doesn't match, try without profile join
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('event_reservations')
-        .select('*')
+        .select('id, event_id, user_id, status, reservation_type, ticket_type, price_paid, confirmation_code, purchased_at')
         .eq('event_id', eventId)
         .neq('status', 'cancelled')
         .order('purchased_at', { ascending: false });

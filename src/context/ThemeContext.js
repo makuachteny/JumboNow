@@ -8,40 +8,58 @@ const THEME_KEY = '@jumbo_now_theme';
 // Accent:  #A8B8C8 (silver/gray from logo)
 
 const darkColors = {
-  background: '#0B1928',
-  backgroundGradient: ['#0B1928', '#102440', '#153058'],
-  headerBg: '#102440',
-  surface: 'rgba(106,173,228,0.08)',
-  surfaceAlt: 'rgba(106,173,228,0.06)',
-  card: 'rgba(106,173,228,0.12)',
-  cardBorder: 'rgba(106,173,228,0.18)',
-  glass: 'rgba(106,173,228,0.10)',
-  glassBorder: 'rgba(106,173,228,0.16)',
-  glassLight: 'rgba(106,173,228,0.12)',
+  // Deep navy base — dark but with blue warmth
+  background: '#060D17',
+  backgroundGradient: ['#060D17', '#0A1525', '#0E1C30'],
+  headerBg: '#081220',
+
+  // Surfaces — blue-tinted, blends with the navy base
+  surface: 'rgba(106,173,228,0.06)',
+  surfaceAlt: 'rgba(106,173,228,0.04)',
+
+  // Cards — slightly lifted with cool blue tone
+  card: 'rgba(106,173,228,0.07)',
+  cardBorder: 'rgba(106,173,228,0.10)',
+
+  // Glass — frosted blue feel
+  glass: 'rgba(106,173,228,0.06)',
+  glassBorder: 'rgba(106,173,228,0.09)',
+  glassLight: 'rgba(106,173,228,0.07)',
+
   blurTint: 'dark',
-  blurIntensity: 60,
+  blurIntensity: 80,
+
+  // Text hierarchy — crisp white on navy, soft blues for secondary
   text: '#FFFFFF',
-  textSecondary: 'rgba(255,255,255,0.75)',
-  textTertiary: '#7BB8E8',
-  textMuted: 'rgba(255,255,255,0.4)',
+  textSecondary: 'rgba(255,255,255,0.68)',
+  textTertiary: '#5A9FD4',
+  textMuted: 'rgba(255,255,255,0.32)',
+
+  // Accent — vibrant blue for interactive elements
   accent: '#6AADE4',
-  accentBg: 'rgba(106,173,228,0.14)',
-  accentBorder: 'rgba(106,173,228,0.25)',
-  accentMuted: 'rgba(106,173,228,0.4)',
+  accentBg: 'rgba(106,173,228,0.10)',
+  accentBorder: 'rgba(106,173,228,0.18)',
+  accentMuted: 'rgba(106,173,228,0.30)',
   buttonPrimary: '#418FDE',
   buttonText: '#FFFFFF',
-  inputBg: 'rgba(106,173,228,0.08)',
-  inputBorder: 'rgba(106,173,228,0.14)',
-  inputFocusBorder: 'rgba(106,173,228,0.45)',
-  inputFocusBg: 'rgba(106,173,228,0.12)',
-  placeholder: 'rgba(123,184,232,0.4)',
+
+  // Inputs — matches the blue-tinted surface
+  inputBg: 'rgba(106,173,228,0.05)',
+  inputBorder: 'rgba(106,173,228,0.09)',
+  inputFocusBorder: 'rgba(106,173,228,0.40)',
+  inputFocusBg: 'rgba(106,173,228,0.08)',
+  placeholder: 'rgba(90,159,212,0.40)',
+
+  // Status
   error: '#EF4444',
   success: '#34D399',
   info: '#60A5FA',
   warning: '#FACC15',
-  overlay: 'rgba(8,20,36,0.88)',
-  modalBg: 'rgba(14,30,54,0.97)',
-  divider: 'rgba(106,173,228,0.10)',
+
+  // Overlays
+  overlay: 'rgba(4,8,16,0.92)',
+  modalBg: 'rgba(6,13,23,0.97)',
+  divider: 'rgba(106,173,228,0.06)',
   statusBarStyle: 'light-content',
 };
 

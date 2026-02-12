@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { X, MapPin } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { freeFoodService } from '../services/freefood.service';
+import { supabase } from '../config/supabase';
 
 export default function FreeFoodBanner() {
   const insets = useSafeAreaInsets();
@@ -48,11 +49,30 @@ export default function FreeFoodBanner() {
       }
     });
 
+    // Hide the banner when the displayed post is deactivated
+    const changesChannel = supabase
+      .channel('free-food-banner-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'free_food_posts' }, (payload) => {
+        if (
+          payload.eventType === 'UPDATE' &&
+          payload.new?.is_active === false
+        ) {
+          setAlertPost((current) => {
+            if (current && current.id === payload.new.id) {
+              hideBanner();
+            }
+            return current;
+          });
+        }
+      })
+      .subscribe();
+
     return () => {
       if (dismissTimer.current) clearTimeout(dismissTimer.current);
       channelRef.current?.unsubscribe();
+      changesChannel?.unsubscribe();
     };
-  }, [showBanner]);
+  }, [showBanner, hideBanner]);
 
   const handlePress = useCallback(() => {
     hideBanner();

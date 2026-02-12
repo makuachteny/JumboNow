@@ -23,38 +23,73 @@ import {
   UserX,
   MessageCircle,
   Users,
-  Star,
-  MapPin,
-  Clock,
   Plus,
   Trash2,
   ChevronRight,
   X,
   Link2,
+  ArrowLeft,
 } from 'lucide-react-native';
 import { friendsService } from '../services/friends.service';
 import { friendGroupsService } from '../services/friendGroups.service';
+import { chatService } from '../services/chat.service';
+import { groupChatService } from '../services/groupChat.service';
 import { useTheme } from '../context/ThemeContext';
 import BottomNav from '../components/BottomNav';
+
+function formatTimestamp(dateStr) {
+  if (!dateStr) return '';
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+
+  if (diffSec < 60) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m`;
+  if (diffHr < 24) return `${diffHr}h`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear()
+  ) {
+    return 'Yesterday';
+  }
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const diffDays = Math.floor(diffHr / 24);
+  if (diffDays < 7) return days[date.getDay()];
+
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
 
 export default function FriendsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [activeTab, setActiveTab] = useState('friends');
+
+  const [viewMode, setViewMode] = useState('messages'); // 'messages' | 'add'
   const [searchQuery, setSearchQuery] = useState('');
   const [friends, setFriends] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [groupConversations, setGroupConversations] = useState([]);
   const [suggested, setSuggested] = useState([]);
   const [requests, setRequests] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
+  const [discoverUsers, setDiscoverUsers] = useState([]);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [expandedGroup, setExpandedGroup] = useState(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
+  const [addActiveTab, setAddActiveTab] = useState('requests'); // 'requests' | 'discover'
   const fadeIn = useRef(new Animated.Value(0)).current;
 
   const mapProfile = (p) => ({
@@ -70,18 +105,20 @@ export default function FriendsScreen({ navigation }) {
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const [friendsData, requestsData, suggestedData, groupsData] = await Promise.all([
+      const [friendsData, convData, groupConvData, requestsData, suggestedData] = await Promise.all([
         friendsService.getFriends(),
+        chatService.getConversations(),
+        groupChatService.getGroupConversations().catch(() => []),
         friendsService.getFriendRequests(),
         friendsService.getSuggestedFriends(),
-        friendGroupsService.getGroups().catch(() => []),
       ]);
       setFriends(friendsData.map(mapProfile));
+      setConversations(convData);
+      setGroupConversations(groupConvData);
       setRequests(requestsData.map((r) => ({ ...mapProfile(r), request_id: r.request_id })));
       setSuggested(suggestedData.map(mapProfile));
-      setGroups(groupsData);
     } catch (err) {
-      setError('Failed to load friends. Pull down to retry.');
+      setError('Failed to load. Pull down to retry.');
     } finally {
       setLoading(false);
     }
@@ -91,26 +128,35 @@ export default function FriendsScreen({ navigation }) {
     fetchData();
     Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }).start();
 
-    const sub = friendsService.subscribeFriendships(() => fetchData());
-    return () => sub?.unsubscribe();
+    const friendSub = friendsService.subscribeFriendships(() => fetchData());
+    const convSub = chatService.subscribeToConversations(() => fetchData());
+    const groupConvSub = groupChatService.subscribeToGroupConversations(() => fetchData());
+
+    return () => {
+      friendSub?.unsubscribe();
+      convSub?.unsubscribe();
+      groupConvSub?.unsubscribe();
+    };
   }, [fetchData]);
 
-  // Debounced user search for Discover tab
+  // Fetch all non-friend users when Discover tab is active
   useEffect(() => {
-    if (activeTab !== 'discover' || searchQuery.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
+    if (viewMode !== 'add' || addActiveTab !== 'discover') return;
+    let cancelled = false;
+    const fetchDiscover = async () => {
+      setDiscoverLoading(true);
       try {
-        const results = await friendsService.searchUsers(searchQuery);
-        setSearchResults(results.map(mapProfile));
+        const results = await friendsService.discoverUsers();
+        if (!cancelled) setDiscoverUsers(results.map(mapProfile));
       } catch {
-        setSearchResults([]);
+        if (!cancelled) setDiscoverUsers([]);
+      } finally {
+        if (!cancelled) setDiscoverLoading(false);
       }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchQuery, activeTab]);
+    };
+    fetchDiscover();
+    return () => { cancelled = true; };
+  }, [viewMode, addActiveTab]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -118,24 +164,71 @@ export default function FriendsScreen({ navigation }) {
     setRefreshing(false);
   }, [fetchData]);
 
-  const tabs = [
-    { id: 'friends', label: 'Friends', count: friends.length },
-    { id: 'groups', label: 'Groups', count: groups.length },
-    { id: 'requests', label: 'Requests', count: requests.length },
-    { id: 'discover', label: 'Discover' },
-  ];
+  // Unified chat list: active chats on top, then friends without convos, then groups
+  const unifiedChatList = useMemo(() => {
+    const q = searchQuery.toLowerCase();
 
-  const filteredFriends = friends.filter(
-    (f) =>
-      (f.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (f.username || '').toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+    const dmFriendIds = new Set();
+    const dms = conversations.map((c) => {
+      if (c.otherUser?.id) dmFriendIds.add(c.otherUser.id);
+      return {
+        type: 'dm',
+        id: c.id,
+        name: c.otherUser?.display_name || c.otherUser?.username || 'User',
+        initials: (c.otherUser?.display_name || c.otherUser?.username || 'U').slice(0, 2).toUpperCase(),
+        avatarColor: c.otherUser?.avatar_color || '#6AADE4',
+        lastMessage: c.lastMessage,
+        lastMessageAt: c.lastMessageAt,
+        otherUser: c.otherUser,
+      };
+    });
+
+    // Friends without a conversation yet
+    const friendDms = friends
+      .filter((f) => !dmFriendIds.has(f.id))
+      .map((f) => ({
+        type: 'dm',
+        id: `friend-${f.id}`,
+        name: f.display_name || f.username || 'User',
+        initials: (f.display_name || f.username || 'U').slice(0, 2).toUpperCase(),
+        avatarColor: f.avatar_color || '#6AADE4',
+        lastMessage: 'Tap to start chatting',
+        lastMessageAt: null,
+        otherUser: f,
+      }));
+
+    const grps = groupConversations.map((g) => ({
+      type: 'group',
+      id: g.id,
+      groupId: g.groupId,
+      name: g.name,
+      icon: g.icon,
+      color: g.color,
+      memberCount: g.memberCount,
+      lastMessage: g.lastMessage,
+      lastMessageAt: g.lastMessageAt,
+    }));
+
+    // Active chats first (by time), then no-convo friends (alphabetical)
+    let combined = [...dms, ...grps, ...friendDms].sort((a, b) => {
+      if (a.lastMessageAt && b.lastMessageAt) return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
+      if (a.lastMessageAt && !b.lastMessageAt) return -1;
+      if (!a.lastMessageAt && b.lastMessageAt) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    if (q && viewMode === 'messages') {
+      combined = combined.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    return combined;
+  }, [conversations, groupConversations, friends, searchQuery, viewMode]);
 
   const handleAddFriend = async (user) => {
     try {
       await friendsService.sendFriendRequest(user.id);
       setSuggested(suggested.filter((s) => s.id !== user.id));
       setSearchResults(searchResults.filter((s) => s.id !== user.id));
+      setDiscoverUsers(discoverUsers.filter((s) => s.id !== user.id));
       Alert.alert('Request Sent', `Friend request sent to ${user.name}!`);
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to send request.');
@@ -162,24 +255,6 @@ export default function FriendsScreen({ navigation }) {
     }
   };
 
-  const handleRemoveFriend = (user) => {
-    Alert.alert('Remove Friend', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await friendsService.removeFriend(user.friendship_id);
-            setFriends(friends.filter((f) => f.id !== user.id));
-          } catch (err) {
-            Alert.alert('Error', err.message || 'Failed to remove friend.');
-          }
-        },
-      },
-    ]);
-  };
-
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
@@ -193,33 +268,6 @@ export default function FriendsScreen({ navigation }) {
       fetchData();
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to create group.');
-    }
-  };
-
-  const handleDeleteGroup = (group) => {
-    Alert.alert('Delete Group', `Delete "${group.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await friendGroupsService.deleteGroup(group.id);
-            setGroups(groups.filter((g) => g.id !== group.id));
-          } catch (err) {
-            Alert.alert('Error', err.message || 'Failed to delete group.');
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleRemoveGroupMember = async (groupId, userId) => {
-    try {
-      await friendGroupsService.removeMember(groupId, userId);
-      fetchData();
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to remove member.');
     }
   };
 
@@ -237,24 +285,97 @@ export default function FriendsScreen({ navigation }) {
     );
   };
 
-  const discoverList = activeTab === 'discover' && searchQuery.length >= 2 ? searchResults : suggested;
+  const filteredDiscoverUsers = useMemo(() => {
+    if (!searchQuery.trim()) return discoverUsers;
+    const q = searchQuery.toLowerCase();
+    return discoverUsers.filter(
+      (u) => u.name?.toLowerCase().includes(q) || u.username?.toLowerCase().includes(q),
+    );
+  }, [discoverUsers, searchQuery]);
+
+  const renderChatItem = ({ item }) => {
+    if (item.type === 'dm') {
+      return (
+        <TouchableOpacity
+          style={styles.chatCard}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('Chat', { friendId: item.otherUser?.id })}
+        >
+          <View style={[styles.chatAvatar, { backgroundColor: item.avatarColor }]}>
+            <Text style={styles.chatAvatarText}>{item.initials}</Text>
+          </View>
+          <View style={styles.chatContent}>
+            <View style={styles.chatTopRow}>
+              <Text style={styles.chatName} numberOfLines={1}>{item.name}</Text>
+              <Text style={styles.chatTime}>{formatTimestamp(item.lastMessageAt)}</Text>
+            </View>
+            <Text style={styles.chatPreview} numberOfLines={1}>
+              {item.lastMessage || 'Tap to start chatting...'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    // Group
+    return (
+      <TouchableOpacity
+        style={styles.chatCard}
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('GroupChat', {
+          groupConversationId: item.id,
+          groupId: item.groupId,
+          groupName: item.name,
+          groupIcon: item.icon,
+          groupColor: item.color,
+          memberCount: item.memberCount,
+        })}
+      >
+        <View style={[styles.groupAvatarSquare, { backgroundColor: (item.color || '#6AADE4') + '20' }]}>
+          <Text style={styles.groupAvatarIcon}>{item.icon || '\uD83D\uDC65'}</Text>
+        </View>
+        <View style={styles.chatContent}>
+          <View style={styles.chatTopRow}>
+            <Text style={styles.chatName} numberOfLines={1}>
+              {item.name} <Text style={styles.memberCountLabel}>({item.memberCount})</Text>
+            </Text>
+            <Text style={styles.chatTime}>{formatTimestamp(item.lastMessageAt)}</Text>
+          </View>
+          <Text style={styles.chatPreview} numberOfLines={1}>
+            {item.lastMessage || 'No messages yet'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle={colors.statusBarStyle} />
 
-      {/* Header - Airbuds-inspired large title + ADD button */}
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>friends</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setActiveTab('discover')}
-          accessibilityLabel="Add friends"
-          accessibilityRole="button"
-        >
-          <UserPlus size={16} color={colors.text} strokeWidth={2.5} />
-          <Text style={styles.addButtonText}>ADD</Text>
-        </TouchableOpacity>
+        {viewMode === 'messages' ? (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => { setViewMode('add'); setSearchQuery(''); }}
+            accessibilityLabel="Add friends"
+            accessibilityRole="button"
+          >
+            <UserPlus size={16} color={colors.text} strokeWidth={2.5} />
+            <Text style={styles.addButtonText}>ADD</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => { setViewMode('messages'); setSearchQuery(''); }}
+            accessibilityLabel="Done adding friends"
+            accessibilityRole="button"
+          >
+            <Text style={styles.addButtonText}>DONE</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Search */}
@@ -262,322 +383,209 @@ export default function FriendsScreen({ navigation }) {
         <Search size={18} color={colors.accentMuted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search for friends"
+          placeholder={viewMode === 'messages' ? 'Search chats' : 'Search for friends'}
           placeholderTextColor={colors.accentMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
           autoCapitalize="none"
         />
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabsRow}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-            onPress={() => setActiveTab(tab.id)}
-          >
-            <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
-              {tab.label}
-            </Text>
-            {tab.count > 0 && (
-              <View style={[styles.tabBadge, activeTab === tab.id && styles.tabBadgeActive]}>
-                <Text style={styles.tabBadgeText}>{tab.count}</Text>
-              </View>
-            )}
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Text style={{ color: colors.accent, fontSize: 16 }}>{'\u2715'}</Text>
           </TouchableOpacity>
-        ))}
+        )}
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
-        keyboardDismissMode="on-drag"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
-        }
-      >
-        <Animated.View style={{ opacity: fadeIn }}>
-
-          {/* ===== FRIENDS TAB ===== */}
-          {activeTab === 'friends' && (
-            <View style={styles.listSection}>
-              {/* Invite Friend Link */}
-              <TouchableOpacity style={styles.inviteRow} onPress={handleInviteLink}>
-                <View style={styles.inviteDashedCircle}>
-                  <Link2 size={20} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.inviteTitle}>Invite friend</Text>
-                  <Text style={styles.inviteSubtext}>Get your friends on JumboNow</Text>
-                </View>
-                <ChevronRight size={18} color={colors.textMuted} />
-              </TouchableOpacity>
-
-              {/* Friends Section Label */}
-              {friends.length > 0 && (
-                <View style={styles.sectionLabelRow}>
-                  <Text style={styles.sectionEmoji}>{'\u{1F499}'}</Text>
-                  <Text style={styles.sectionLabel}>Friends</Text>
-                </View>
-              )}
-
-              {filteredFriends.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Users size={40} color={colors.accentMuted} />
-                  <Text style={styles.emptyTitle}>
-                    {searchQuery ? 'No results found' : 'No friends yet'}
-                  </Text>
-                  <Text style={styles.emptySubtext}>
-                    {searchQuery ? 'Try a different search' : 'Discover people to connect with!'}
-                  </Text>
-                </View>
-              ) : (
-                filteredFriends.map((friend) => (
-                  <TouchableOpacity
-                    key={friend.id}
-                    style={styles.friendCard}
-                    onLongPress={() => handleRemoveFriend(friend)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.friendAvatar, { backgroundColor: friend.avatarColor }]}>
-                      <Text style={styles.friendAvatarText}>{friend.avatar}</Text>
-                    </View>
-                    <View style={styles.friendInfo}>
-                      <View style={styles.friendNameRow}>
-                        <Text style={styles.friendName}>{friend.name}</Text>
-                        {friend.verified && (
-                          <View style={styles.verifiedBadge}>
-                            <Text style={styles.verifiedText}>{'\u2713'}</Text>
-                          </View>
-                        )}
-                        <Text style={styles.friendYear}>{friend.year}</Text>
-                      </View>
-                      <Text style={styles.friendUsername}>@{friend.username}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.messageBtn}
-                      onPress={() => navigation.navigate('Chat', { friendId: friend.id })}
-                      accessibilityLabel={`Message ${friend.name}`}
-                      accessibilityRole="button"
-                    >
-                      <MessageCircle size={18} color={colors.text} />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))
-              )}
+      {/* ===== MESSAGES VIEW ===== */}
+      {viewMode === 'messages' && (
+        <>
+          {/* Create Group button */}
+          <TouchableOpacity
+            style={styles.createGroupBtn}
+            onPress={() => setShowCreateGroup(true)}
+          >
+            <View style={styles.createGroupIcon}>
+              <Plus size={22} color={colors.accent} strokeWidth={2.5} />
             </View>
-          )}
+            <Text style={styles.createGroupText}>Create Group</Text>
+          </TouchableOpacity>
 
-          {/* ===== GROUPS TAB ===== */}
-          {activeTab === 'groups' && (
-            <View style={styles.listSection}>
-              <TouchableOpacity
-                style={styles.createGroupBtn}
-                onPress={() => setShowCreateGroup(true)}
-              >
-                <View style={styles.createGroupIcon}>
-                  <Plus size={22} color={colors.accent} strokeWidth={2.5} />
-                </View>
-                <Text style={styles.createGroupText}>Create Group</Text>
-              </TouchableOpacity>
-
-              {groups.length === 0 ? (
+          <FlatList
+            data={unifiedChatList}
+            keyExtractor={(item) => `${item.type}-${item.id}`}
+            renderItem={renderChatItem}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insets.bottom + 90 },
+              unifiedChatList.length === 0 && styles.listContentEmpty,
+            ]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+            }
+            ListEmptyComponent={
+              loading ? (
                 <View style={styles.emptyState}>
-                  <Users size={40} color={colors.accentMuted} />
-                  <Text style={styles.emptyTitle}>No groups yet</Text>
-                  <Text style={styles.emptySubtext}>Create a group to organize your friends</Text>
+                  <ActivityIndicator size="large" color={colors.accent} />
                 </View>
               ) : (
-                groups.map((group) => {
-                  const memberCount = group.members?.length || 0;
-                  const isExpanded = expandedGroup === group.id;
-                  return (
-                    <View key={group.id}>
-                      <TouchableOpacity
-                        style={styles.groupCard}
-                        onPress={() => setExpandedGroup(isExpanded ? null : group.id)}
-                        onLongPress={() => handleDeleteGroup(group)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.groupIcon, { backgroundColor: group.color + '20' }]}>
-                          <Text style={styles.groupIconText}>{group.icon}</Text>
+                <View style={styles.emptyState}>
+                  <Users size={40} color={colors.accentMuted} />
+                  <Text style={styles.emptyTitle}>No friends yet</Text>
+                  <Text style={styles.emptySubtext}>Add friends to start chatting!</Text>
+                  <TouchableOpacity
+                    style={styles.emptyActionBtn}
+                    onPress={() => { setViewMode('add'); setSearchQuery(''); }}
+                  >
+                    <Text style={styles.emptyActionBtnText}>Find Friends</Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            }
+          />
+        </>
+      )}
+
+      {/* ===== ADD VIEW ===== */}
+      {viewMode === 'add' && (
+        <>
+          {/* Sub-tabs: Requests | Discover */}
+          <View style={styles.tabsRow}>
+            <TouchableOpacity
+              style={[styles.tab, addActiveTab === 'requests' && styles.tabActive]}
+              onPress={() => setAddActiveTab('requests')}
+            >
+              <Text style={[styles.tabText, addActiveTab === 'requests' && styles.tabTextActive]}>Requests</Text>
+              {requests.length > 0 && (
+                <View style={[styles.tabBadge, addActiveTab === 'requests' && styles.tabBadgeActive]}>
+                  <Text style={styles.tabBadgeText}>{requests.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, addActiveTab === 'discover' && styles.tabActive]}
+              onPress={() => setAddActiveTab('discover')}
+            >
+              <Text style={[styles.tabText, addActiveTab === 'discover' && styles.tabTextActive]}>Discover</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+            keyboardDismissMode="on-drag"
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+            }
+          >
+            <Animated.View style={{ opacity: fadeIn }}>
+              {/* REQUESTS TAB */}
+              {addActiveTab === 'requests' && (
+                <View style={styles.listSection}>
+                  {/* Invite Friend Link */}
+                  <TouchableOpacity style={styles.inviteRow} onPress={handleInviteLink}>
+                    <View style={styles.inviteDashedCircle}>
+                      <Link2 size={20} color={colors.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inviteTitle}>Invite friend</Text>
+                      <Text style={styles.inviteSubtext}>Get your friends on JumboNow</Text>
+                    </View>
+                    <ChevronRight size={18} color={colors.textMuted} />
+                  </TouchableOpacity>
+
+                  {requests.length === 0 ? (
+                    <View style={styles.emptyState}>
+                      <UserPlus size={40} color={colors.accentMuted} />
+                      <Text style={styles.emptyTitle}>No pending requests</Text>
+                      <Text style={styles.emptySubtext}>When someone sends you a request, it'll show up here.</Text>
+                    </View>
+                  ) : (
+                    requests.map((request) => (
+                      <View key={request.id} style={styles.requestCard}>
+                        <View style={[styles.friendAvatar, { backgroundColor: request.avatarColor }]}>
+                          <Text style={styles.friendAvatarText}>{request.avatar}</Text>
                         </View>
                         <View style={styles.friendInfo}>
-                          <Text style={styles.friendName}>{group.name}</Text>
-                          <Text style={styles.friendUsername}>{memberCount} member{memberCount !== 1 ? 's' : ''}</Text>
-                        </View>
-                        {/* Overlapping avatars */}
-                        <View style={styles.avatarStack}>
-                          {(group.members || []).slice(0, 3).map((m, i) => (
-                            <View
-                              key={m.id}
-                              style={[
-                                styles.stackedAvatar,
-                                { backgroundColor: m.profile?.avatar_color || '#6AADE4', marginLeft: i > 0 ? -10 : 0, zIndex: 3 - i },
-                              ]}
-                            >
-                              <Text style={styles.stackedAvatarText}>
-                                {(m.profile?.display_name || m.profile?.username || '?').slice(0, 1).toUpperCase()}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                        <ChevronRight
-                          size={18}
-                          color={colors.textMuted}
-                          style={{ transform: [{ rotate: isExpanded ? '90deg' : '0deg' }] }}
-                        />
-                      </TouchableOpacity>
-
-                      {isExpanded && (
-                        <View style={styles.groupExpanded}>
-                          {(group.members || []).map((m) => (
-                            <View key={m.id} style={styles.groupMemberRow}>
-                              <View style={[styles.smallAvatar, { backgroundColor: m.profile?.avatar_color || '#6AADE4' }]}>
-                                <Text style={styles.smallAvatarText}>
-                                  {(m.profile?.display_name || m.profile?.username || '?').slice(0, 2).toUpperCase()}
-                                </Text>
+                          <View style={styles.friendNameRow}>
+                            <Text style={styles.friendName}>{request.name}</Text>
+                            {request.verified && (
+                              <View style={styles.verifiedBadge}>
+                                <Text style={styles.verifiedText}>{'\u2713'}</Text>
                               </View>
-                              <Text style={styles.groupMemberName}>{m.profile?.display_name || m.profile?.username}</Text>
-                              <TouchableOpacity
-                                onPress={() => handleRemoveGroupMember(group.id, m.user_id)}
-                                style={styles.removeMemberBtn}
-                              >
-                                <X size={14} color={colors.error} />
-                              </TouchableOpacity>
-                            </View>
-                          ))}
-                          {memberCount === 0 && (
-                            <Text style={styles.groupEmptyText}>No members yet</Text>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  );
-                })
-              )}
-            </View>
-          )}
-
-          {/* ===== REQUESTS TAB ===== */}
-          {activeTab === 'requests' && (
-            <View style={styles.listSection}>
-              {requests.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <UserPlus size={40} color={colors.accentMuted} />
-                  <Text style={styles.emptyTitle}>No pending requests</Text>
-                  <Text style={styles.emptySubtext}>When someone sends you a request, it'll show up here.</Text>
-                </View>
-              ) : (
-                requests.map((request) => (
-                  <View key={request.id} style={styles.requestCard}>
-                    <View style={[styles.friendAvatar, { backgroundColor: request.avatarColor }]}>
-                      <Text style={styles.friendAvatarText}>{request.avatar}</Text>
-                    </View>
-                    <View style={styles.friendInfo}>
-                      <View style={styles.friendNameRow}>
-                        <Text style={styles.friendName}>{request.name}</Text>
-                        {request.verified && (
-                          <View style={styles.verifiedBadge}>
-                            <Text style={styles.verifiedText}>{'\u2713'}</Text>
+                            )}
                           </View>
-                        )}
-                      </View>
-                      <Text style={styles.friendUsername}>@{request.username}</Text>
-                      {request.bio ? <Text style={styles.friendBio}>{request.bio}</Text> : null}
-                      <View style={styles.requestActions}>
-                        <TouchableOpacity
-                          style={styles.acceptBtn}
-                          onPress={() => handleAcceptRequest(request)}
-                        >
-                          <UserCheck size={16} color={colors.text} />
-                          <Text style={styles.acceptBtnText}>Accept</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.declineBtn}
-                          onPress={() => handleDeclineRequest(request)}
-                        >
-                          <UserX size={16} color={colors.error} />
-                          <Text style={styles.declineBtnText}>Decline</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                ))
-              )}
-            </View>
-          )}
-
-          {/* ===== DISCOVER TAB ===== */}
-          {activeTab === 'discover' && (
-            <View style={styles.listSection}>
-              {searchQuery.length >= 2 && searchResults.length > 0 && (
-                <>
-                  <Text style={styles.discoverLabel}>Search Results</Text>
-                  {searchResults.map((person) => (
-                    <View key={person.id} style={styles.friendCard}>
-                      <View style={[styles.friendAvatar, { backgroundColor: person.avatarColor }]}>
-                        <Text style={styles.friendAvatarText}>{person.avatar}</Text>
-                      </View>
-                      <View style={styles.friendInfo}>
-                        <View style={styles.friendNameRow}>
-                          <Text style={styles.friendName}>{person.name}</Text>
-                          {person.verified && (
-                            <View style={styles.verifiedBadge}>
-                              <Text style={styles.verifiedText}>{'\u2713'}</Text>
-                            </View>
-                          )}
-                          <Text style={styles.friendYear}>{person.year}</Text>
+                          <Text style={styles.friendUsername}>@{request.username}</Text>
+                          {request.bio ? <Text style={styles.friendBio}>{request.bio}</Text> : null}
+                          <View style={styles.requestActions}>
+                            <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAcceptRequest(request)}>
+                              <UserCheck size={16} color={colors.text} />
+                              <Text style={styles.acceptBtnText}>Accept</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.declineBtn} onPress={() => handleDeclineRequest(request)}>
+                              <UserX size={16} color={colors.error} />
+                              <Text style={styles.declineBtnText}>Decline</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                        <Text style={styles.friendUsername}>@{person.username}</Text>
                       </View>
-                      <TouchableOpacity style={styles.addFriendBtn} onPress={() => handleAddFriend(person)}>
-                        <Text style={styles.addFriendBtnText}>ADD</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </>
-              )}
-
-              {searchQuery.length >= 2 && searchResults.length === 0 && (
-                <View style={styles.emptyState}>
-                  <Search size={40} color={colors.accentMuted} />
-                  <Text style={styles.emptyTitle}>No users found</Text>
-                  <Text style={styles.emptySubtext}>Try a different name or username</Text>
+                    ))
+                  )}
                 </View>
               )}
 
-              {/* Suggested Friends - Horizontal Cards (Airbuds-style) */}
-              {suggested.length > 0 && (
-                <>
-                  <Text style={styles.discoverLabel}>ADD FRIENDS</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.suggestedRow}
-                  >
-                    {suggested.map((person) => (
-                      <View key={person.id} style={styles.suggestedCard}>
-                        <View style={[styles.suggestedAvatar, { backgroundColor: person.avatarColor }]}>
-                          <Text style={styles.suggestedAvatarText}>{person.avatar}</Text>
+              {/* DISCOVER TAB */}
+              {addActiveTab === 'discover' && (
+                <View style={styles.listSection}>
+                  {discoverLoading ? (
+                    <View style={styles.emptyState}>
+                      <ActivityIndicator size="large" color={colors.accent} />
+                    </View>
+                  ) : filteredDiscoverUsers.length > 0 ? (
+                    <>
+                      <Text style={styles.discoverLabel}>
+                        {searchQuery.trim() ? 'RESULTS' : 'PEOPLE ON JUMBONOW'}
+                      </Text>
+                      {filteredDiscoverUsers.map((person) => (
+                        <View key={person.id} style={styles.friendCard}>
+                          <View style={[styles.friendAvatar, { backgroundColor: person.avatarColor }]}>
+                            <Text style={styles.friendAvatarText}>{person.avatar}</Text>
+                          </View>
+                          <View style={styles.friendInfo}>
+                            <View style={styles.friendNameRow}>
+                              <Text style={styles.friendName}>{person.name}</Text>
+                              {person.verified && (
+                                <View style={styles.verifiedBadge}>
+                                  <Text style={styles.verifiedText}>{'\u2713'}</Text>
+                                </View>
+                              )}
+                              <Text style={styles.friendYear}>{person.year}</Text>
+                            </View>
+                            <Text style={styles.friendUsername}>@{person.username}</Text>
+                          </View>
+                          <TouchableOpacity style={styles.addFriendBtn} onPress={() => handleAddFriend(person)}>
+                            <Text style={styles.addFriendBtnText}>ADD</Text>
+                          </TouchableOpacity>
                         </View>
-                        <Text style={styles.suggestedName} numberOfLines={1}>{person.name}</Text>
-                        <Text style={styles.suggestedMutual}>{person.mutualFriends} mutual friend{person.mutualFriends !== 1 ? 's' : ''}</Text>
-                        <TouchableOpacity style={styles.suggestedAddBtn} onPress={() => handleAddFriend(person)}>
-                          <Text style={styles.suggestedAddBtnText}>ADD</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </>
+                      ))}
+                    </>
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Users size={40} color={colors.accentMuted} />
+                      <Text style={styles.emptyTitle}>
+                        {searchQuery.trim() ? 'No users found' : 'No new people to discover'}
+                      </Text>
+                      <Text style={styles.emptySubtext}>
+                        {searchQuery.trim() ? 'Try a different name or username' : "You've connected with everyone on JumboNow!"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               )}
-            </View>
-          )}
-
-        </Animated.View>
-      </ScrollView>
+            </Animated.View>
+          </ScrollView>
+        </>
+      )}
 
       {/* Create Group Modal */}
       <Modal visible={showCreateGroup} animationType="slide" transparent onRequestClose={() => setShowCreateGroup(false)}>
@@ -692,6 +700,103 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+
+  // Create group button in messages view
+  createGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  createGroupIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: colors.accentBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createGroupText: {
+    color: colors.accent,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // Chat list
+  listContent: { paddingHorizontal: 16, paddingTop: 4 },
+  listContentEmpty: { flexGrow: 1 },
+  chatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 6,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  chatAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatAvatarText: {
+    color: '#FFF',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  groupAvatarSquare: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupAvatarIcon: {
+    fontSize: 24,
+  },
+  chatContent: {
+    flex: 1,
+    gap: 4,
+  },
+  chatTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  chatName: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 8,
+  },
+  memberCountLabel: {
+    color: colors.textTertiary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  chatTime: {
+    color: colors.accentMuted,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  chatPreview: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+
+  // Tabs for add mode
   tabsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -741,7 +846,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingTop: 8,
   },
 
-  // Invite row (Airbuds-style)
+  // Invite row
   inviteRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -772,22 +877,6 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
-  },
-
-  // Section labels
-  sectionLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectionEmoji: {
-    fontSize: 18,
-  },
-  sectionLabel: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
   },
 
   // Friend cards
@@ -866,20 +955,8 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 12,
     marginBottom: 2,
   },
-  friendMeta: {
-    color: colors.accentMuted,
-    fontSize: 11,
-  },
-  messageBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.cardBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
-  // ADD friend button (pill style like Airbuds)
+  // ADD friend button
   addFriendBtn: {
     paddingHorizontal: 18,
     paddingVertical: 8,
@@ -938,8 +1015,6 @@ const createStyles = (colors) => StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 12,
   },
-
-  // Suggested friends horizontal cards (Airbuds-style)
   suggestedRow: {
     paddingRight: 16,
     gap: 10,
@@ -992,115 +1067,6 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Groups
-  createGroupBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  createGroupIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: colors.accentBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createGroupText: {
-    color: colors.accent,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  groupCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  groupIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groupIconText: {
-    fontSize: 22,
-  },
-  avatarStack: {
-    flexDirection: 'row',
-    marginRight: 4,
-  },
-  stackedAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.card,
-  },
-  stackedAvatarText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  groupExpanded: {
-    marginLeft: 32,
-    marginBottom: 8,
-    paddingLeft: 16,
-    borderLeftWidth: 2,
-    borderLeftColor: colors.cardBorder,
-  },
-  groupMemberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-  },
-  groupMemberName: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  groupEmptyText: {
-    color: colors.textMuted,
-    fontSize: 13,
-    paddingVertical: 8,
-  },
-  removeMemberBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(239,68,68,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  smallAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  smallAvatarText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-
   // Empty state
   emptyState: {
     alignItems: 'center',
@@ -1117,6 +1083,19 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 13,
     textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyActionBtn: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: colors.buttonPrimary,
+  },
+  emptyActionBtnText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   // Modal
@@ -1198,6 +1177,18 @@ const createStyles = (colors) => StyleSheet.create({
   checkmark: {
     color: '#FFF',
     fontSize: 12,
+    fontWeight: '800',
+  },
+  smallAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smallAvatarText: {
+    color: '#FFF',
+    fontSize: 11,
     fontWeight: '800',
   },
   modalCreateBtn: {

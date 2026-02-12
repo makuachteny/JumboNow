@@ -11,6 +11,7 @@ import {
   Modal,
   Share,
   Image,
+  Linking,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,15 +31,23 @@ import {
   UserPlus,
   X,
   Send,
+  CalendarPlus,
+  MessageCircle,
+  ChevronRight,
 } from 'lucide-react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { eventsService } from '../services/events.service';
 import { ticketsService } from '../services/tickets.service';
 import { reportsService } from '../services/reports.service';
 import { friendsService } from '../services/friends.service';
 import { friendGroupsService } from '../services/friendGroups.service';
+import { chatService } from '../services/chat.service';
+import { groupChatService } from '../services/groupChat.service';
 import { supabase } from '../config/supabase';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import SmartIcon from '../components/SmartIcon';
+import { getEventIcon } from '../config/clubLogos';
 
 // Fallback background images for events without their own image
 const EVENT_FALLBACK_IMAGES = [
@@ -80,6 +89,12 @@ export default function EventDetailScreen({ route, navigation }) {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [attendees, setAttendees] = useState([]);
   const [attendeesLoading, setAttendeesLoading] = useState(false);
+  const [showShareSheet, setShowShareSheet] = useState(false);
+  const [showChatPicker, setShowChatPicker] = useState(false);
+  const [chatPickerFriends, setChatPickerFriends] = useState([]);
+  const [chatPickerGroups, setChatPickerGroups] = useState([]);
+  const [chatPickerLoading, setChatPickerLoading] = useState(false);
+  const [sharedToIds, setSharedToIds] = useState(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -161,8 +176,9 @@ export default function EventDetailScreen({ route, navigation }) {
     ]);
   };
 
-  const handleShare = async () => {
+  const handleShareLink = async () => {
     if (!event) return;
+    setShowShareSheet(false);
     const dateString = new Date(event.start_time).toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
@@ -174,6 +190,68 @@ export default function EventDetailScreen({ route, navigation }) {
         title: event.title,
       });
     } catch {}
+  };
+
+  const handleShareToChat = async () => {
+    setShowShareSheet(false);
+    setShowChatPicker(true);
+    setChatPickerLoading(true);
+    try {
+      const [friendsData, groupsData] = await Promise.all([
+        friendsService.getFriends(),
+        groupChatService.getGroupConversations().catch(() => []),
+      ]);
+      setChatPickerFriends(friendsData);
+      setChatPickerGroups(groupsData);
+    } catch {
+      setChatPickerFriends([]);
+      setChatPickerGroups([]);
+    } finally {
+      setChatPickerLoading(false);
+    }
+  };
+
+  const buildEventMetadata = () => ({
+    type: 'event_share',
+    event_id: event.id,
+    event_title: event.title,
+    event_date: event.start_time,
+    event_location: event.location || '',
+    event_icon: event.icon || '\uD83C\uDF89',
+  });
+
+  const handleShareToFriend = async (friendId) => {
+    try {
+      const convId = await chatService.getOrCreateConversation(friendId);
+      await chatService.sendMessage(convId, '', buildEventMetadata());
+      setSharedToIds((prev) => new Set([...prev, friendId]));
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to share.');
+    }
+  };
+
+  const handleShareToGroup = async (groupConvId) => {
+    try {
+      await groupChatService.sendMessage(groupConvId, '', buildEventMetadata());
+      setSharedToIds((prev) => new Set([...prev, groupConvId]));
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to share.');
+    }
+  };
+
+  const handleAddToCalendar = () => {
+    if (!event) return;
+    const start = new Date(event.start_time);
+    const end = new Date(event.end_time || start.getTime() + 3600000);
+    const fmt = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: event.title,
+      dates: `${fmt(start)}/${fmt(end)}`,
+      details: event.description || '',
+      location: event.location || '',
+    });
+    Linking.openURL(`https://calendar.google.com/calendar/render?${params.toString()}`);
   };
 
   const handleReport = () => {
@@ -339,7 +417,7 @@ export default function EventDetailScreen({ route, navigation }) {
             <View style={styles.heroNavRight}>
               <TouchableOpacity
                 style={styles.heroButton}
-                onPress={handleShare}
+                onPress={() => setShowShareSheet(true)}
                 accessibilityLabel="Share event"
                 accessibilityRole="button"
               >
@@ -378,7 +456,7 @@ export default function EventDetailScreen({ route, navigation }) {
         {/* Organizer Info */}
         <View style={styles.organizerRow}>
           <View style={styles.organizerAvatar}>
-            <Text style={styles.organizerAvatarText}>{event.organizer_icon || '🐘'}</Text>
+            <SmartIcon value={getEventIcon(event, '\uD83D\uDC18')} size={32} borderRadius={12} />
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -486,6 +564,15 @@ export default function EventDetailScreen({ route, navigation }) {
             <MapPin size={18} color={colors.accent} />
             <Text style={styles.detailText}>{event.location}</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addCalendarBtn}
+            onPress={handleAddToCalendar}
+            accessibilityLabel="Add event to calendar"
+            accessibilityRole="button"
+          >
+            <CalendarPlus size={15} color={colors.accent} />
+            <Text style={styles.addCalendarText}>Add to Calendar</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Tags */}
@@ -534,29 +621,51 @@ export default function EventDetailScreen({ route, navigation }) {
           <Text style={styles.inviteFriendsBtnText}>Invite Friends</Text>
         </TouchableOpacity>
 
-        {/* Already Reserved Card */}
+        {/* Already Reserved Card — with QR Code */}
         {reservation && (
           <View style={styles.reservedCard}>
             <View style={styles.reservedHeader}>
               <CheckCircle size={24} color={colors.success} />
               <Text style={styles.reservedTitle}>You're Going!</Text>
             </View>
-            <TouchableOpacity
-              style={styles.codeCard}
-              onPress={async () => {
-                await Clipboard.setStringAsync(reservation.confirmation_code);
-                Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
-              }}
-              accessibilityLabel={`Confirmation code: ${reservation.confirmation_code}. Tap to copy`}
-              accessibilityRole="button"
-            >
-              <Text style={styles.codeLabel}>Confirmation Code</Text>
-              <Text style={styles.codeText}>{reservation.confirmation_code}</Text>
+
+            {/* QR Code Ticket */}
+            <View style={styles.qrTicketCard}>
+              <View style={styles.qrCodeWrap}>
+                <QRCode
+                  value={`jumbonow://ticket/${reservation.confirmation_code}`}
+                  size={160}
+                  backgroundColor="#FFFFFF"
+                  color="#0B1A2E"
+                  quietZone={12}
+                />
+              </View>
+              <Text style={styles.qrScanHint}>Scan at entry for check-in</Text>
+              <View style={styles.qrDivider}>
+                <View style={styles.qrDividerCircleLeft} />
+                <View style={styles.qrDividerLine} />
+                <View style={styles.qrDividerCircleRight} />
+              </View>
+              <TouchableOpacity
+                style={styles.qrCodeRow}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(reservation.confirmation_code);
+                  Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
+                }}
+                accessibilityLabel={`Confirmation code: ${reservation.confirmation_code}. Tap to copy`}
+                accessibilityRole="button"
+              >
+                <View>
+                  <Text style={styles.codeLabel}>Confirmation Code</Text>
+                  <Text style={styles.codeText}>{reservation.confirmation_code}</Text>
+                </View>
+                <Text style={styles.codeCopyBtn}>Copy</Text>
+              </TouchableOpacity>
               <Text style={styles.codeType}>
                 {reservation.reservation_type === 'free_rsvp' ? 'Free RSVP' : `${reservation.ticket_type} Ticket - $${reservation.price_paid}`}
               </Text>
-              <Text style={styles.codeCopyHint}>Tap to copy</Text>
-            </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={handleCancel}
@@ -721,6 +830,124 @@ export default function EventDetailScreen({ route, navigation }) {
         </View>
       </Modal>
 
+      {/* Share Sheet Modal */}
+      <Modal visible={showShareSheet} animationType="fade" transparent onRequestClose={() => setShowShareSheet(false)}>
+        <TouchableOpacity style={styles.shareSheetOverlay} activeOpacity={1} onPress={() => setShowShareSheet(false)}>
+          <View style={styles.shareSheetContent}>
+            <View style={styles.shareSheetHandle} />
+            <Text style={styles.shareSheetTitle}>Share Event</Text>
+            <TouchableOpacity style={styles.shareSheetOption} onPress={handleShareLink}>
+              <View style={[styles.shareSheetIconWrap, { backgroundColor: colors.accentBg }]}>
+                <Share2 size={20} color={colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.shareSheetOptionTitle}>Share Link</Text>
+                <Text style={styles.shareSheetOptionSub}>Copy or share via other apps</Text>
+              </View>
+              <ChevronRight size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.shareSheetOption} onPress={handleShareToChat}>
+              <View style={[styles.shareSheetIconWrap, { backgroundColor: 'rgba(34,197,94,0.12)' }]}>
+                <MessageCircle size={20} color="#22C55E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.shareSheetOptionTitle}>Share to Chat</Text>
+                <Text style={styles.shareSheetOptionSub}>Send to a friend or group</Text>
+              </View>
+              <ChevronRight size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Chat Picker Modal */}
+      <Modal visible={showChatPicker} animationType="slide" transparent onRequestClose={() => setShowChatPicker(false)}>
+        <View style={styles.inviteOverlay}>
+          <View style={styles.inviteContent}>
+            <View style={styles.inviteHeader}>
+              <Text style={styles.inviteTitle}>Share to Chat</Text>
+              <TouchableOpacity onPress={() => setShowChatPicker(false)}>
+                <X size={22} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {chatPickerLoading ? (
+              <ActivityIndicator size="large" color={colors.accent} style={{ paddingVertical: 40 }} />
+            ) : (
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                {chatPickerGroups.length > 0 && (
+                  <>
+                    <Text style={styles.inviteSectionLabel}>Groups</Text>
+                    {chatPickerGroups.map((group) => {
+                      const shared = sharedToIds.has(group.id);
+                      return (
+                        <View key={group.id} style={styles.inviteRow}>
+                          <View style={[styles.inviteGroupIcon, { backgroundColor: (group.color || '#6AADE4') + '20' }]}>
+                            <Text style={{ fontSize: 18 }}>{group.icon}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.inviteRowName}>{group.name}</Text>
+                            <Text style={styles.inviteRowSub}>{group.memberCount} members</Text>
+                          </View>
+                          {shared ? (
+                            <View style={styles.invitedBadge}>
+                              <CheckCircle size={14} color={colors.success} />
+                              <Text style={styles.invitedBadgeText}>Sent</Text>
+                            </View>
+                          ) : (
+                            <TouchableOpacity style={styles.inviteBtn} onPress={() => handleShareToGroup(group.id)}>
+                              <Text style={styles.inviteBtnText}>Send</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </>
+                )}
+
+                {chatPickerFriends.length > 0 && (
+                  <>
+                    <Text style={styles.inviteSectionLabel}>Friends</Text>
+                    {chatPickerFriends.map((friend) => {
+                      const shared = sharedToIds.has(friend.id);
+                      return (
+                        <View key={friend.id} style={styles.inviteRow}>
+                          <View style={[styles.inviteFriendAvatar, { backgroundColor: friend.avatar_color || '#6AADE4' }]}>
+                            <Text style={styles.inviteFriendAvatarText}>
+                              {(friend.display_name || friend.username || '?').slice(0, 2).toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.inviteRowName}>{friend.display_name || friend.username}</Text>
+                            <Text style={styles.inviteRowSub}>@{friend.username}</Text>
+                          </View>
+                          {shared ? (
+                            <View style={styles.invitedBadge}>
+                              <CheckCircle size={14} color={colors.success} />
+                              <Text style={styles.invitedBadgeText}>Sent</Text>
+                            </View>
+                          ) : (
+                            <TouchableOpacity style={styles.inviteBtn} onPress={() => handleShareToFriend(friend.id)}>
+                              <Text style={styles.inviteBtnText}>Send</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </>
+                )}
+
+                {chatPickerFriends.length === 0 && chatPickerGroups.length === 0 && (
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Users size={40} color={colors.accentMuted} />
+                    <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 12 }}>No friends yet. Add some first!</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Mock Payment Modal */}
       <Modal visible={showPaymentModal} animationType="slide" transparent onRequestClose={() => { setShowPaymentModal(false); setPaymentSuccess(false); }}>
         <View style={styles.paymentOverlay}>
@@ -732,6 +959,19 @@ export default function EventDetailScreen({ route, navigation }) {
                 </View>
                 <Text style={styles.successTitle}>Purchase Successful!</Text>
                 <Text style={styles.successSubtitle}>Your ticket has been confirmed</Text>
+
+                {/* QR Code for purchased ticket */}
+                <View style={styles.successQrWrap}>
+                  <QRCode
+                    value={`jumbonow://ticket/${successCode}`}
+                    size={140}
+                    backgroundColor="#FFFFFF"
+                    color="#0B1A2E"
+                    quietZone={10}
+                  />
+                </View>
+                <Text style={styles.successQrHint}>Show this QR code at entry</Text>
+
                 <TouchableOpacity
                   style={styles.successCodeCard}
                   onPress={async () => {
@@ -872,6 +1112,8 @@ const createStyles = (colors) => StyleSheet.create({
   detailsSection: { padding: 16, gap: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   detailText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
+  addCalendarBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
+  addCalendarText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
   tagsSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
   tag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
   tagText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
@@ -887,9 +1129,18 @@ const createStyles = (colors) => StyleSheet.create({
   reservedCard: { marginHorizontal: 16, marginBottom: 16, padding: 20, borderRadius: 16, backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder },
   reservedHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   reservedTitle: { color: colors.success, fontSize: 20, fontWeight: '900' },
-  codeCard: { alignItems: 'center', padding: 16, borderRadius: 12, backgroundColor: colors.accentBg, marginBottom: 16 },
-  codeLabel: { color: colors.textTertiary, fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  codeText: { color: colors.accent, fontSize: 28, fontWeight: '900', letterSpacing: 3, marginBottom: 4 },
+  // QR Code Ticket Card
+  qrTicketCard: { alignItems: 'center', padding: 20, borderRadius: 16, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, marginBottom: 16 },
+  qrCodeWrap: { padding: 12, borderRadius: 16, backgroundColor: '#FFFFFF', marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  qrScanHint: { color: colors.textTertiary, fontSize: 12, fontWeight: '600', marginBottom: 16 },
+  qrDivider: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 16 },
+  qrDividerCircleLeft: { width: 16, height: 16, borderRadius: 8, backgroundColor: colors.glass, marginLeft: -28 },
+  qrDividerLine: { flex: 1, height: 1, borderStyle: 'dashed', borderWidth: 1, borderColor: colors.cardBorder, marginHorizontal: 8 },
+  qrDividerCircleRight: { width: 16, height: 16, borderRadius: 8, backgroundColor: colors.glass, marginRight: -28 },
+  qrCodeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4, marginBottom: 6 },
+  codeLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  codeText: { color: colors.accent, fontSize: 22, fontWeight: '900', letterSpacing: 2 },
+  codeCopyBtn: { color: colors.accent, fontSize: 13, fontWeight: '700', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.accentBg, overflow: 'hidden' },
   codeType: { color: colors.textTertiary, fontSize: 12, fontWeight: '500' },
   codeCopyHint: { color: colors.accentMuted, fontSize: 11, fontWeight: '600', marginTop: 6 },
   cancelButton: { alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.error + '40', backgroundColor: colors.error + '10' },
@@ -929,7 +1180,9 @@ const createStyles = (colors) => StyleSheet.create({
   successContent: { alignItems: 'center', paddingVertical: 20 },
   successIcon: { marginBottom: 16 },
   successTitle: { color: colors.text, fontSize: 24, fontWeight: '900', marginBottom: 6 },
-  successSubtitle: { color: colors.textTertiary, fontSize: 14, marginBottom: 24 },
+  successSubtitle: { color: colors.textTertiary, fontSize: 14, marginBottom: 16 },
+  successQrWrap: { padding: 12, borderRadius: 16, backgroundColor: '#FFFFFF', marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  successQrHint: { color: colors.textTertiary, fontSize: 12, fontWeight: '600', marginBottom: 16 },
   successCodeCard: { alignItems: 'center', padding: 20, borderRadius: 16, backgroundColor: colors.accentBg, marginBottom: 24, width: '100%' },
   successCodeLabel: { color: colors.textTertiary, fontSize: 12, fontWeight: '600', marginBottom: 6 },
   successCodeText: { color: colors.accent, fontSize: 32, fontWeight: '900', letterSpacing: 4 },
@@ -954,4 +1207,30 @@ const createStyles = (colors) => StyleSheet.create({
   inviteBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   invitedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: 'rgba(34,197,94,0.1)' },
   invitedBadgeText: { color: colors.success, fontSize: 12, fontWeight: '700' },
+
+  // Share sheet
+  shareSheetOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  shareSheetContent: {
+    backgroundColor: colors.modalBg || colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  shareSheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.textMuted, alignSelf: 'center', marginBottom: 16 },
+  shareSheetTitle: { color: colors.text, fontSize: 20, fontWeight: '900', marginBottom: 16 },
+  shareSheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+  },
+  shareSheetIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  shareSheetOptionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  shareSheetOptionSub: { color: colors.textTertiary, fontSize: 12, marginTop: 2 },
 });

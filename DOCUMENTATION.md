@@ -15,29 +15,36 @@
 4. [Authentication](#4-authentication)
 5. [Screens](#5-screens)
 6. [Services](#6-services)
-7. [Database Schema](#7-database-schema)
-8. [Storage](#8-storage)
-9. [Real-Time Subscriptions](#9-real-time-subscriptions)
-10. [Theming](#10-theming)
-11. [Navigation](#11-navigation)
-12. [Environment Variables](#12-environment-variables)
-13. [Scripts](#13-scripts)
+7. [Components](#7-components)
+8. [Database Schema](#8-database-schema)
+9. [Storage](#9-storage)
+10. [Real-Time Subscriptions](#10-real-time-subscriptions)
+11. [External APIs](#11-external-apis)
+12. [Theming](#12-theming)
+13. [Navigation](#13-navigation)
+14. [Security](#14-security)
+15. [Testing](#15-testing)
+16. [Environment Variables](#16-environment-variables)
+17. [Scripts](#17-scripts)
 
 ---
 
 ## 1. Overview
 
-JumboNow is a mobile event discovery and ticketing platform built for Tufts University students. Students can browse campus events, reserve free spots or purchase tickets, manage friendships, receive real-time notifications, and create their own events with poster images.
+JumboNow is a mobile campus platform built for Tufts University students. Students can browse campus events, reserve spots or purchase tickets, manage friendships, track dining menus with real logos, find free food, navigate campus with live shuttle tracking, and access 15 campus resources -- all in one app.
 
 **Core capabilities:**
-- Event browsing with search, filters, and featured events
-- Free RSVP and paid ticket purchases with confirmation codes
-- Event creation with image upload, ticket tiers, and tagging
-- Friend system with requests, suggestions, and real-time updates
-- Push-style notification system with categorized alerts
-- User profiles with avatar upload, bio, and achievement badges
+- Event browsing with search, filters, and featured events carousel
+- Free RSVP and paid ticket purchases with QR-coded confirmation codes
+- Event creation with logo/poster upload, ticket tiers, and tagging
+- Friend system with requests, groups, messaging, and real-time updates
+- Dining menus with real Nutrislice logos and live operating status
+- Live shuttle tracking with Passio GO integration and route schedules
+- Campus resources hub with 15 quick-access tiles
+- Push notification system with categorized alerts
+- User profiles with campus resources tab and vibe score
 - Light and dark theme support
-- Real-time data sync via Supabase Realtime (Postgres Changes)
+- Real-time data sync via Supabase Realtime
 
 ---
 
@@ -52,9 +59,14 @@ JumboNow is a mobile event discovery and ticketing platform built for Tufts Univ
 | Backend            | Supabase (PostgreSQL + Auth + Storage)  | 2.95.3    |
 | Local Storage      | @react-native-async-storage             | 2.2.0     |
 | Icons              | lucide-react-native                     | 0.563.0   |
+| QR Codes           | react-native-qrcode-svg                 | 6.3.21    |
+| Maps               | react-native-maps                       | 1.20.1    |
 | Image Picker       | expo-image-picker                       | 17.0.10   |
-| Clipboard          | expo-clipboard                          | 7.0.2     |
-| Safe Area          | react-native-safe-area-context          | 5.4.0     |
+| Clipboard          | expo-clipboard                          | 8.0.8     |
+| Safe Area          | react-native-safe-area-context          | 5.6.0     |
+| Dining API         | Nutrislice (no key required)            | --        |
+| Shuttle API        | Passio GO (System ID: 6670)             | --        |
+| Routing            | OSRM (no key required)                  | --        |
 
 ---
 
@@ -62,10 +74,11 @@ JumboNow is a mobile event discovery and ticketing platform built for Tufts Univ
 
 ```
 JumboNow/
-├── App.js                          # Entry point, ErrorBoundary, navigation
+├── App.js                          # Entry point, ErrorBoundary, navigation, deep linking
 ├── app.json                        # Expo configuration
 ├── package.json                    # Dependencies and scripts
 ├── index.js                        # registerRootComponent
+├── jest.setup.js                   # Test setup and mocks
 │
 ├── assets/
 │   ├── jumbo-logo.png              # App logo (Tufts Jumbo)
@@ -86,48 +99,56 @@ JumboNow/
 │   ├── utils/
 │   │   └── safeColor.js            # Hex color validation utility
 │   │
+│   ├── hooks/
+│   │   └── usePushNotifications.js # Push notification registration + handling
+│   │
 │   ├── components/
-│   │   └── BottomNav.js            # Tab bar (Events, Discover, Tickets, Profile)
+│   │   ├── BottomNav.js            # Tab bar (Map, Friends, Events, Tickets, Profile)
+│   │   ├── FreeFoodBanner.js       # Real-time push banner for free food alerts
+│   │   └── SmartIcon.js            # Universal URL-image / emoji-text renderer
+│   │
+│   ├── data/
+│   │   ├── campusLocations.js      # 19 campus locations with coordinates
+│   │   └── diningLocations.js      # 11 dining locations with logos + Transact links
 │   │
 │   ├── services/
 │   │   ├── auth.service.js         # Authentication and profile management
 │   │   ├── events.service.js       # Event CRUD, filtering, attendance
 │   │   ├── tickets.service.js      # Reservations and ticket purchases
 │   │   ├── friends.service.js      # Friend requests, suggestions
+│   │   ├── friendGroups.service.js # Friend group CRUD and membership
+│   │   ├── chat.service.js         # Conversations and messages
 │   │   ├── notifications.service.js# Notification management
+│   │   ├── freefood.service.js     # Free food posts and subscriptions
+│   │   ├── dining.service.js       # Nutrislice API integration
+│   │   ├── achievements.service.js # Achievement definitions and unlocking
+│   │   ├── reports.service.js      # Content reporting with validation
 │   │   └── storage.service.js      # Avatar image upload/delete
 │   │
 │   └── screens/
 │       ├── LandingScreen.js        # Welcome screen (unauthenticated)
 │       ├── LoginScreen.js          # Email/password login
 │       ├── RegisterScreen.js       # Account creation (@tufts.edu)
-│       ├── HomeScreen.js           # Main feed with featured events
+│       ├── EmailVerificationScreen.js # Email confirmation flow
+│       ├── OnboardingScreen.js     # First-time user onboarding
+│       ├── HomeScreen.js           # Main feed with featured events + FAB
 │       ├── DiscoverScreen.js       # Search + advanced filters
 │       ├── EventDetailScreen.js    # Full event view + ticketing
-│       ├── CreateEventScreen.js    # Event creation form
-│       ├── MyTicketsScreen.js      # User's reservations
-│       ├── ProfileScreen.js        # User profile + settings
-│       ├── FriendsScreen.js        # Friends, requests, suggestions
+│       ├── CreateEventScreen.js    # Event creation with logo/poster upload
+│       ├── MyTicketsScreen.js      # Reservations with QR codes
+│       ├── ProfileScreen.js        # Profile + campus resources + settings
+│       ├── FriendsScreen.js        # Friends, requests, groups
+│       ├── ChatScreen.js           # Direct messaging
 │       ├── NotificationsScreen.js  # Notification center
-│       └── ChatScreen.js           # Messaging (coming soon)
+│       ├── DiningScreen.js         # Dining locations with button filters
+│       ├── DiningMenuScreen.js     # Meal period menus with nutrition
+│       ├── FreeFoodScreen.js       # Free food alert map
+│       ├── MapScreen.js            # Campus map + live shuttle tracker
+│       └── CampusResourcesScreen.js# Campus resources grid (standalone)
 │
 └── supabase/
-    └── migrations/
-        ├── 00001_create_profiles.sql
-        ├── 00002_create_events.sql
-        ├── 00003_create_activities.sql
-        ├── 00004_create_friendships.sql
-        ├── 00005_create_notifications.sql
-        ├── 00006_rls_policies.sql
-        ├── 00007_database_functions.sql
-        ├── 00008_triggers.sql
-        ├── 00009_seed_data.sql
-        ├── 00010_ocl_transform.sql
-        ├── 00011_ocl_seed_data.sql
-        ├── 00012_tufts_blue_colors.sql
-        ├── 00013_fix_notification_insert_policy.sql
-        ├── 00014_add_performance_indexes.sql
-        └── 00015_create_event_images_bucket.sql
+    ├── config.toml                 # Supabase project configuration
+    └── migrations/                 # 22 SQL migrations
 ```
 
 ---
@@ -154,94 +175,103 @@ JumboNow/
 - Authenticated users see: All app screens
 - Controlled via `AppNavigator` in `App.js`
 
-**Profile management:**
-
-- `authService.getCurrentProfile()` fetches the user's profile
-- `authService.updateProfile(updates)` applies a field whitelist before writing:
-  - Allowed fields: `display_name`, `username`, `bio`, `graduation_year`, `avatar_url`, `avatar_color`
+**Profile update security:**
+- `authService.updateProfile(updates)` applies a field allowlist:
+- Allowed fields: `display_name`, `username`, `bio`, `graduation_year`, `avatar_url`, `avatar_color`, `account_type`
+- Disallowed fields (silently stripped): `id`, `email`, `is_verified`, `vibe_score`, etc.
 
 ---
 
 ## 5. Screens
 
 ### 5.1 LandingScreen
-The welcome screen for unauthenticated users. Displays the Tufts Jumbo logo with a pulsing animation, floating emoji rain background, and live statistics pulled from Supabase (active event count, registered student count). Two CTAs route to Register and Login.
+Welcome screen for unauthenticated users. Pulsing Jumbo logo, floating emoji rain, live stats from Supabase, and Register/Login CTAs.
 
 ### 5.2 LoginScreen
-Email/password sign-in form with animated entry, input focus indicators, and loading state. On success, the auth state listener in `App.js` navigates to `HomeScreen`.
+Email/password sign-in with animated entry and loading state.
 
 ### 5.3 RegisterScreen
-Account creation form enforcing `@tufts.edu` email, unique username, graduation year, and password confirmation. After sign-up, the database trigger creates the user profile automatically.
+Account creation enforcing `@tufts.edu` email, unique username, graduation year, and password confirmation. Supports student/club/staff account types.
 
 ### 5.4 HomeScreen
-The main hub of the app. Displays:
-- **Featured events carousel** with poster images (horizontal scroll)
-- **Stats bar** showing total events, events this week, and free event count
-- **Quick filters**: All, This Week, Free, Student Orgs
-- **Category filters**: 8 event types (General, Student Orgs, Arts & Culture, Sports, Academic, Outdoors, Campus Center, Greek Life)
-- **Event cards** showing title, organizer, time, location, spots remaining, and price
-- **Floating action button** to create a new event
-
-Real-time subscription updates the list when events change.
+Main hub displaying:
+- **Featured events carousel** with poster images (75% screen width cards)
+- **Quick filters**: All Events, Friends' Events, This Week (with persistent state)
+- **Category filters**: 8 event types as scrollable pills
+- **Event cards** with SmartIcon for logos/emojis
+- **FAB menu**: Create Event, Dining & Food (with nested Free Food sub-item)
 
 ### 5.5 DiscoverScreen
-Search and advanced filtering interface:
-- **Search bar** with text input filtering (client-side match on title, location, organizer, tags)
-- **Filter icon** opens a modal with Category, Price (Free/Paid/All), and Date (Today/This Week/This Month/All) options
-- **Active filter chips** displayed below the search bar with a "Clear all" option
-- **Trending searches** shown when no search query is active
+Search + advanced filtering with debounced text input, filter modal (category, price, date), active filter chips, and trending searches. Best accessibility coverage in the app.
 
 ### 5.6 EventDetailScreen
-Full event detail view with:
-- **Hero section** showing the event poster image (or gradient color fallback) extending behind the status bar
-- **Organizer card** with host info
-- **Details grid**: date/time, location, attendee count, capacity bar
-- **Description** section
-- **Reservation/purchase flow**:
-  - Free events: "Reserve Spot" button -> confirmation code
-  - Paid events: ticket type selector -> payment modal (mock) -> confirmation code
-  - Already reserved: shows confirmation card with tap-to-copy code
-  - Cancel reservation option
+Event detail with hero image, organizer card with SmartIcon, details grid, and reservation/purchase flow. QR code display on confirmed reservations.
 
 ### 5.7 CreateEventScreen
-Full event creation form with:
-- **Live preview banner** reflecting current selections (poster image, icon, title, color)
-- **Basic info**: title, subtitle, description, organizer name
-- **Event poster**: image picker (16:9 crop, uploaded to Supabase Storage)
-- **Event type**: 8 category options
-- **Icon picker**: 24 emoji options
-- **Color picker**: 8 gradient presets
-- **Date/time/location**: manual text entry with flexible parsing (MM/DD/YYYY, H:MM AM/PM)
-- **Capacity**: max attendees
-- **Pricing**: free/paid toggle, base price, multiple ticket tiers
-- **Tags**: add/remove custom tags
-- **Featured toggle**: mark event as featured
+Event creation with:
+- **Logo upload**: Pick image from device, upload to Supabase Storage (`org-logos/` folder)
+- **Poster image**: 16:9 crop, uploaded to `event-posters/` folder
+- **File validation**: Extension allowlist (jpg, jpeg, png, gif, webp) and size limits (5MB logos, 10MB posters)
+- Live preview banner, emoji grid fallback, ticket tiers, tags
 
 ### 5.8 MyTicketsScreen
-User's reservation history split into two tabs:
-- **Upcoming**: active reservations for future events
-- **Past**: completed or cancelled reservations
-Each ticket card shows event icon, title, organizer, status badge (Confirmed/Waitlisted/Cancelled), date, time, location, confirmation code (tap to copy), and price paid.
+Reservations split into Upcoming/Past tabs. Each ticket shows:
+- SmartIcon for event icon, title, organizer, status badge
+- QR code generated from confirmation code (tap to toggle)
+- Apple Wallet button (iOS only, upcoming confirmed tickets only)
+- 1-5 star rating with feedback for past events
 
 ### 5.9 ProfileScreen
 User profile with three content tabs:
-- **Activity**: user's ticket history
-- **Achievements**: 6 badge slots (3 unlocked, 3 locked) - currently hardcoded
-- **About**: email, major, graduation year, campus
+- **Activity**: User's ticket history with SmartIcon event icons
+- **Campus**: 15 campus resource tiles (Dining, Canvas, Shuttle, Health, Safety, Fitness, Athletics, Apps, Laundry, Parking, Technology, Free Food, Map, Study Spaces, Reserve Tufts) with in-app navigation or external links
+- **About**: Email, major, graduation year, campus
 
-Features: avatar upload/color customization, display name/bio editing, settings modal with dark mode toggle and logout.
+Settings modal with dark mode toggle, help, feedback, and logout.
 
 ### 5.10 FriendsScreen
-Friend management with three tabs:
-- **Friends**: accepted connections with search filtering
-- **Requests**: pending incoming requests with Accept/Decline
-- **Discover**: suggested friends based on who you're not already connected with
+Friend management with three tabs: Friends, Requests, Discover.
 
 ### 5.11 NotificationsScreen
-Notification center with filter tabs (All, Events, System). Displays unread notifications in a "New" section and read notifications in "Earlier". Supports mark-as-read, mark-all-as-read, individual delete, and clear-all. Real-time subscription for new notifications.
+Notification center with filter tabs (All, Events, System), mark-as-read, and real-time subscription.
 
 ### 5.12 ChatScreen
-Placeholder messaging screen displaying a "coming soon" banner. Shows the user's online friends list and mock conversation cards. No messaging backend exists.
+Direct messaging with real-time delivery.
+
+### 5.13 DiningScreen
+Dining locations with:
+- **Equal-width button filters** (All, Dining Halls, Cafes, Grab & Go) using `flex:1`
+- Real dining logos via SmartIcon (from Nutrislice API)
+- Live open/closed/closing-soon status badges
+- Tap to navigate to DiningMenuScreen
+
+### 5.14 DiningMenuScreen
+Individual dining hall menu with:
+- Meal period tabs with gradient active styling (breakfast=gold, lunch=green, dinner=purple)
+- Expandable menu items with nutrition info
+- "Order on Transact" floating button for supported locations
+- SmartIcon header with dining logo
+
+### 5.15 MapScreen
+Dual-mode interactive map:
+
+**Campus Mode:**
+- 19 campus locations across 5 categories
+- Category filter pills, location cards, walking directions
+- "View Menu" button on dining locations
+
+**Shuttle Mode:**
+- Live bus markers with 10-second auto-refresh via Passio GO API
+- Route pills with color coding, bus count badges, and "Inactive" labels
+- Route polylines following roads via OSRM
+- Bus detail popup (name, route, speed, live indicator)
+- Route schedule panel with service days, hours, frequency, route description
+- Dismissible holiday schedule alert banner
+- "Live Tracking on Passio GO" external link
+- Walking navigation to stops with distance and ETA
+
+### 5.16 CampusResourcesScreen
+Standalone campus resources grid with favorites and search.
 
 ---
 
@@ -250,70 +280,80 @@ Placeholder messaging screen displaying a "coming soon" banner. Shows the user's
 ### 6.1 auth.service.js
 | Method | Description |
 | --- | --- |
-| `signUp({ email, password, username, graduationYear })` | Creates auth user and triggers profile creation |
+| `signUp({ email, password, username, graduationYear, accountType })` | Creates auth user with metadata |
 | `signIn({ email, password })` | Authenticates and returns session |
 | `signOut()` | Destroys session |
 | `getSession()` | Returns current auth session |
-| `getCurrentProfile()` | Fetches authenticated user's profile row |
-| `updateProfile(updates)` | Whitelisted field update on profiles table |
+| `getCurrentProfile()` | Fetches authenticated user's profile |
+| `updateProfile(updates)` | Allowlisted field update on profiles table |
 | `onAuthStateChange(callback)` | Subscribes to auth state events |
 
 ### 6.2 events.service.js
 | Method | Description |
 | --- | --- |
-| `getEvents({ category, isLive })` | Fetch upcoming events with optional category/live filter |
+| `getEvents({ category, isLive })` | Fetch upcoming events with optional filters |
 | `getFeaturedEvents()` | Fetch events where `is_featured = true` |
-| `getEventsByFilters({ eventType, isFree, timeRange })` | Advanced multi-filter query |
-| `getEventById(eventId)` | Fetch single event with host and attendee count |
-| `createEvent(eventData)` | Insert new event tied to authenticated user |
-| `joinEvent(eventId)` | Add user as event attendee |
-| `leaveEvent(eventId)` | Remove user from event attendees |
-| `isAttending(eventId)` | Check if user is attending |
-| `subscribeToEvents(callback)` | Realtime listener on events, attendees, and reservations tables |
+| `getEventsByFilters({ eventType, isFree, timeRange })` | Multi-filter query |
+| `getFriendsEvents({ page })` | Get events friends are attending |
+| `searchEvents(query)` | Full-text search with sanitization + fallback |
+| `getEventById(eventId)` | Fetch single event with details |
+| `createEvent(eventData)` | Insert new event (rate-limited) |
+| `subscribeToEvents(callback)` | Realtime listener |
 
 ### 6.3 tickets.service.js
 | Method | Description |
 | --- | --- |
-| `reserveEvent(eventId)` | Free RSVP with confirmation code generation |
-| `purchaseTicket(eventId, ticketType, price)` | Paid ticket with price validation and confirmation code |
-| `cancelReservation(reservationId)` | Set reservation status to 'cancelled' |
+| `reserveEvent(eventId)` | Free RSVP with crypto-secure confirmation code |
+| `purchaseTicket(eventId, ticketType, price)` | Paid ticket with confirmation code |
+| `cancelReservation(reservationId)` | Cancel reservation |
 | `getMyTickets()` | Fetch all user reservations with event details |
-| `getReservationForEvent(eventId)` | Check for existing active reservation |
-| `subscribeToReservations(callback)` | Realtime listener on reservations table |
-
-**Confirmation codes:** 8-character alphanumeric string generated via `crypto.getRandomValues()`. Character set excludes ambiguous characters (O, I, L, 0, 1).
+| `submitRating(reservationId, rating, feedback)` | Submit event rating |
+| `getWalletPassUrl(reservationId)` | Generate Edge Function URL for wallet pass |
 
 ### 6.4 friends.service.js
 | Method | Description |
 | --- | --- |
-| `getFriends()` | Fetch accepted friendships with profile data |
+| `getFriends()` | Fetch accepted friendships |
 | `getFriendRequests()` | Fetch pending incoming requests |
-| `sendFriendRequest(addresseeId)` | Create pending friendship |
-| `acceptRequest(friendshipId)` | Accept and update to 'accepted' |
-| `declineRequest(friendshipId)` | Decline and update to 'declined' |
-| `removeFriend(friendshipId)` | Delete friendship row |
-| `getSuggestedFriends()` | Fetch users not already connected |
-| `subscribeFriendships(callback)` | Realtime listener on friendships table |
+| `sendFriendRequest(addresseeId)` | Create pending friendship (rate-limited) |
+| `acceptRequest(friendshipId)` | Accept request |
+| `removeFriend(friendshipId)` | Delete friendship |
+| `getSuggestedFriends()` | Fetch non-connected users |
+| `searchFriends(query)` | Search by username/display name with sanitization |
 
-### 6.5 notifications.service.js
+### 6.5 dining.service.js
 | Method | Description |
 | --- | --- |
-| `getNotifications()` | Fetch last 50 notifications for user |
-| `markAsRead(notificationId)` | Mark single notification as read (ownership-checked) |
-| `markAllAsRead()` | Mark all user's unread notifications as read |
-| `deleteNotification(notificationId)` | Delete single notification (ownership-checked) |
-| `clearAll()` | Delete all user's notifications |
-| `subscribeToNotifications(callback)` | Realtime listener for new notifications |
+| `getSchools()` | Fetch all dining locations with logos and hours |
+| `getMenu(slug, mealType, date)` | Fetch menu for specific location/meal/date |
 
-### 6.6 storage.service.js
+### 6.6 reports.service.js
 | Method | Description |
 | --- | --- |
-| `uploadProfileImage(uri)` | Upload avatar to `avatars` bucket, update profile |
-| `deleteProfileImage()` | Remove avatar files and clear profile URL |
+| `reportContent({ reportedType, reportedId, reason, details })` | Submit report with validation |
+
+Validates: report type (event/user/message/free_food), reason (spam/inappropriate/...), details length (max 1000 chars).
 
 ---
 
-## 7. Database Schema
+## 7. Components
+
+### 7.1 SmartIcon
+Universal icon renderer that detects if a value is an HTTPS URL or emoji string.
+- URL values: Renders as `<Image>` with configurable size and border radius
+- Emoji values: Renders as `<Text>` with proportional font size
+- Only accepts `https://` URLs (HTTP rejected for security)
+- Used across all screens for event icons, dining logos, organizer avatars
+
+### 7.2 BottomNav
+Five-tab navigation bar: Map, Friends, Events (center), Tickets, Profile.
+
+### 7.3 FreeFoodBanner
+Real-time push banner that appears when a new free food alert is posted.
+
+---
+
+## 8. Database Schema
 
 ### Tables
 
@@ -329,9 +369,7 @@ Placeholder messaging screen displaying a "coming soon" banner. Shows the user's
 | avatar_url | TEXT | |
 | avatar_color | TEXT | Default '#6AADE4' |
 | is_verified | BOOLEAN | Default false |
-| joined_date | TEXT | |
-| events_attended | INTEGER | Default 0 |
-| tickets_count | INTEGER | Default 0 |
+| account_type | TEXT | Default 'student' |
 | vibe_score | INTEGER | Default 50 |
 | created_at | TIMESTAMPTZ | Auto |
 | updated_at | TIMESTAMPTZ | Auto via trigger |
@@ -341,232 +379,183 @@ Placeholder messaging screen displaying a "coming soon" banner. Shows the user's
 | --- | --- | --- |
 | id | UUID (PK) | Auto-generated |
 | title | TEXT | Required |
-| subtitle | TEXT | |
-| description | TEXT | |
-| icon | TEXT | Default '🎉' |
-| color | TEXT | Default '#6AADE4' |
-| gradient_colors | TEXT[] | Default Tufts blue gradient |
+| icon | TEXT | Emoji or URL (via SmartIcon) |
+| organizer_icon | TEXT | Emoji or uploaded logo URL |
+| image_url | TEXT | Poster image URL |
 | category | TEXT | Default 'General' |
-| location | TEXT | |
-| distance | TEXT | |
-| start_time | TIMESTAMPTZ | Required |
-| end_time | TIMESTAMPTZ | Required |
-| max_capacity | INTEGER | Default 100 |
-| tags | TEXT[] | Default '{}' |
-| energy | INTEGER | Default 50 |
-| vibe | TEXT | Default 'Active' |
 | ticket_price | DECIMAL | Default 0 |
 | is_free | BOOLEAN | Generated: ticket_price = 0 |
-| requires_reservation | BOOLEAN | Default true |
-| event_type | TEXT | Default 'general' |
-| organizer_name | TEXT | |
-| organizer_icon | TEXT | Default Tufts Jumbo |
-| image_url | TEXT | Poster image URL |
-| ticket_types | JSONB | Default '[]' |
 | is_featured | BOOLEAN | Default false |
 | created_by | UUID | FK to profiles |
-| created_at | TIMESTAMPTZ | Auto |
-| updated_at | TIMESTAMPTZ | Auto via trigger |
-
-**event_attendees**
-| Column | Type | Notes |
-| --- | --- | --- |
-| id | UUID (PK) | |
-| event_id | UUID | FK to events (cascade) |
-| user_id | UUID | FK to profiles (cascade) |
-| joined_at | TIMESTAMPTZ | Default now() |
-| | | Unique(event_id, user_id) |
 
 **event_reservations**
 | Column | Type | Notes |
 | --- | --- | --- |
-| id | UUID (PK) | |
-| event_id | UUID | FK to events (cascade) |
-| user_id | UUID | FK to profiles (cascade) |
-| status | TEXT | 'confirmed' / 'waitlisted' / 'cancelled' |
-| reservation_type | TEXT | 'free_rsvp' / 'ticket_purchase' |
-| ticket_type | TEXT | Default 'general' |
-| price_paid | DECIMAL | Default 0 |
-| confirmation_code | TEXT | Required, 8-char alphanumeric |
-| purchased_at | TIMESTAMPTZ | Default now() |
-| created_at | TIMESTAMPTZ | Default now() |
-| | | Unique(event_id, user_id) |
-
-**friendships**
-| Column | Type | Notes |
-| --- | --- | --- |
-| id | UUID (PK) | |
-| requester_id | UUID | FK to profiles (cascade) |
-| addressee_id | UUID | FK to profiles (cascade) |
-| status | TEXT | 'pending' / 'accepted' / 'declined' |
-| created_at | TIMESTAMPTZ | Auto |
-| updated_at | TIMESTAMPTZ | Auto via trigger |
-| | | Unique(requester_id, addressee_id) |
-
-**notifications**
-| Column | Type | Notes |
-| --- | --- | --- |
-| id | UUID (PK) | |
-| user_id | UUID | FK to profiles (cascade) |
-| type | TEXT | Default 'system' |
-| icon | TEXT | Default bell emoji |
-| title | TEXT | Required |
-| body | TEXT | |
-| category | TEXT | Default 'system' |
-| color | TEXT | Default '#6AADE4' |
-| read | BOOLEAN | Default false |
-| created_at | TIMESTAMPTZ | Auto |
+| confirmation_code | TEXT | 8-char crypto-secure alphanumeric |
+| rating | INTEGER | CHECK (1-5), set after event |
+| feedback | TEXT | Optional rating feedback |
+| UNIQUE | | (event_id, user_id) |
 
 ### Row Level Security
 
-All tables have RLS enabled. Summary of policies:
-
-| Table | SELECT | INSERT | UPDATE | DELETE |
-| --- | --- | --- | --- | --- |
-| profiles | Public | Own only | Own only | - |
-| events | Public | Creator only | Creator only | Creator only |
-| event_attendees | Public | Own only | - | Own only |
-| event_reservations | Own + event host | Own only | Own only | Own only |
-| friendships | Participants only | Requester only | Participants | Participants |
-| notifications | Own only | Own only | Own only | Own only |
+All tables have RLS enabled with ownership-scoped policies.
 
 ### Database Functions
 
-| Function | Trigger | Description |
-| --- | --- | --- |
-| `handle_new_user()` | After INSERT on auth.users | Creates profile row + welcome notification |
-| `handle_event_join()` | After INSERT on event_attendees | Notifies event creator |
-| `handle_friend_request()` | After INSERT on friendships | Notifies addressee |
-| `handle_friend_accepted()` | After UPDATE on friendships | Notifies requester when accepted |
-| `handle_reservation_created()` | After INSERT on event_reservations | Notifies user + event creator |
-| `handle_updated_at()` | Before UPDATE on various | Auto-updates `updated_at` column |
-| `get_attendee_count(event_uuid)` | - | Returns attendee count for event |
-| `get_mutual_friends_count(a, b)` | - | Returns mutual friend count |
-| `get_friend_count(user_uuid)` | - | Returns accepted friend count |
-| `generate_confirmation_code()` | - | SQL-level 8-char code generator |
-
-### Performance Indexes
-
-| Index | Table | Column(s) |
-| --- | --- | --- |
-| idx_events_start_time | events | start_time |
-| idx_events_event_type | events | event_type |
-| idx_events_is_featured | events | is_featured (partial: WHERE true) |
-| idx_profiles_username | profiles | username |
-| idx_event_attendees_event_id | event_attendees | event_id |
-| idx_reservations_event_user | event_reservations | (event_id, user_id) |
-| idx_friendships_requester | friendships | requester_id |
-| idx_friendships_addressee | friendships | addressee_id |
-| idx_friendships_status | friendships | status |
-| idx_notifications_user | notifications | user_id |
-| idx_notifications_read | notifications | read |
+| Function | Purpose |
+| --- | --- |
+| `reserve_event_with_capacity()` | Atomic RSVP with row-level capacity lock |
+| `purchase_ticket_with_inventory()` | Atomic ticket purchase with inventory check |
+| `check_rate_limit(user_id, action, max, window_min)` | Per-action rate limiting |
+| `check_and_unlock_achievements(user_id)` | Achievement check and unlock |
 
 ---
 
-## 8. Storage
+## 9. Storage
 
-Two Supabase Storage buckets:
+Three usage areas in Supabase Storage:
 
-| Bucket | Visibility | Purpose |
-| --- | --- | --- |
-| `avatars` | Public read | Profile pictures. Path: `{user_id}/avatar.{ext}` |
-| `event-images` | Public read | Event poster images. Path: `event-posters/{timestamp}.{ext}` |
+| Bucket | Folder | Purpose | Validation |
+| --- | --- | --- | --- |
+| `avatars` | `{user_id}/` | Profile pictures | Extension allowlist + 5MB limit |
+| `event-images` | `org-logos/` | Organization logos | Extension allowlist + 5MB limit |
+| `event-images` | `event-posters/` | Event poster images | Extension allowlist + 10MB limit |
 
-**Upload policies:**
-- Authenticated users can upload to both buckets
-- Public can read from both buckets
-- Users can delete their own files from `event-images`
-- Accepted file types (avatars): jpg, jpeg, png, gif, webp
+**Allowed extensions**: jpg, jpeg, png, gif, webp
 
 ---
 
-## 9. Real-Time Subscriptions
+## 10. Real-Time Subscriptions
 
-The app uses Supabase Realtime (Postgres Changes) for live updates:
+| Screen | Tables Watched |
+| --- | --- |
+| HomeScreen | events, event_attendees, event_reservations |
+| MyTicketsScreen | event_reservations |
+| FriendsScreen | friendships |
+| NotificationsScreen | notifications |
+| ChatScreen | messages |
+| FreeFoodScreen | free_food_posts |
 
-| Screen | Channel | Tables Watched |
-| --- | --- | --- |
-| HomeScreen | events-changes | events, event_attendees, event_reservations |
-| EventDetailScreen | (inherits from Home) | - |
-| MyTicketsScreen | reservations | event_reservations |
-| FriendsScreen | friendships | friendships |
-| NotificationsScreen | notifications | notifications |
-
-All subscriptions are cleaned up on component unmount via `useEffect` return callbacks.
+All subscriptions cleaned up on component unmount.
 
 ---
 
-## 10. Theming
+## 11. External APIs
 
-The app supports light and dark themes via `ThemeContext`.
+### Nutrislice (Dining)
+- Base URL: `https://tufts.api.nutrislice.com/menu/api`
+- Returns: location info, logos, hours, menus with full nutrition
+- Caching: Schools 1hr, menus 30min
+- No API key required
 
-**Default:** Dark mode
+### Passio GO (Shuttle)
+- Base URL: `https://passio3.com/www/mapGetData.php`
+- System ID: 6670
+- Returns: routes, live bus GPS, stops with route assignments
+- Polling: 10-second interval for bus positions
 
-**Storage:** Theme preference persisted in AsyncStorage under key `jumbonow_theme`.
+### OSRM (Routing)
+- URL: `https://router.project-osrm.org/route/v1/{mode}/{coords}`
+- Used for: shuttle route polylines, walking directions
+- No API key required
 
-**Brand colors (Tufts):**
+---
+
+## 12. Theming
+
+**Default:** Dark mode. Stored in AsyncStorage key `@jumbo_now_theme`.
+
+**Tufts brand colors:**
 - Primary Blue: `#418FDE`
 - Light Blue: `#6AADE4`
 - Dark Blue: `#3579C6`
 - Silver: `#A8B8C8`
 
-**Color tokens (24 total):** background, surface, surfaceAlt, card, cardBorder, text, textSecondary, textTertiary, textMuted, accent, accentBg, accentBorder, accentMuted, buttonPrimary, buttonSecondary, inputBg, placeholder, divider, error, success, info, warning, modalOverlay, statusBarStyle.
+24 color tokens covering background, surface, text, accent, buttons, inputs, and status colors. All screens use `createStyles(colors)` pattern.
 
 ---
 
-## 11. Navigation
+## 13. Navigation
 
 **Library:** @react-navigation/native-stack v7
 
-**Stack structure:**
-```
-NavigationContainer
-└── NativeStackNavigator (screenOptions: headerShown: false)
-    ├── [Unauthenticated]
-    │   ├── Landing
-    │   ├── Login
-    │   └── Register
-    │
-    └── [Authenticated]
-        ├── Home           (BottomNav: Events)
-        ├── Profile        (BottomNav: Profile)
-        ├── Notifications
-        ├── Friends
-        ├── Discover       (BottomNav: Discover)
-        ├── EventDetail    (params: { eventId })
-        ├── MyTickets      (BottomNav: My Tickets)
-        ├── CreateEvent
-        └── Chat
-```
+**19 registered screens** in `App.js`:
+Landing, Login, Register, EmailVerification, Onboarding, Home, Profile, Notifications, Friends, Discover, EventDetail, MyTickets, CreateEvent, Chat, Map, FreeFood, Dining, DiningMenu, CampusResources
 
-**Bottom navigation tabs:** Events (Home), Discover, My Tickets, Profile
+**Deep linking** via `jumbonow://` and `https://jumbonow.app` prefixes.
 
 ---
 
-## 12. Environment Variables
+## 14. Security
+
+**Implemented protections:**
+- Profile update field allowlist (strips unauthorized fields like `id`, `email`, `is_verified`)
+- Search input sanitization (removes `,()\\` before PostgREST filter interpolation)
+- Server-side rate limiting via `check_rate_limit` RPC
+- Row-Level Security on all 18 Supabase tables
+- Cryptographically secure confirmation codes (`crypto.getRandomValues` with fallback)
+- Image upload validation: extension allowlist + size limits
+- HTTPS-only URL rendering in SmartIcon component
+- 5-second fetch timeouts via AbortController
+- UUID validation on friend suggestions
+- Content report validation (type, reason, details length)
+
+**Known considerations:**
+- Auth tokens stored in AsyncStorage (consider migrating to expo-secure-store)
+- Deep links should be guarded by authentication state
+- Console logging should be disabled in production builds
+
+---
+
+## 15. Testing
+
+**Framework:** Jest 29 + jest-expo + @testing-library/react-native
+
+**5 test suites, 24 tests:**
+
+| Suite | Tests | Coverage |
+| --- | --- | --- |
+| auth.service.test.js | 3 | Signup metadata, profile allowlist, error handling |
+| events.service.test.js | 3 | Friends events, create retry, search sanitization |
+| tickets.service.test.js | 2 | Wallet pass URL, session handling |
+| reports.service.test.js | 5 | Type validation, reason validation, length check, auth requirement |
+| MyTicketsScreen.test.js | 5 | Ticket count badge, Apple Wallet (iOS/Android/cancelled/past) |
+
+**Mocks** configured in `jest.setup.js`: Supabase client, ThemeContext, SafeAreaContext, expo modules, lucide icons, BottomNav.
+
+---
+
+## 16. Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `EXPO_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public API key |
-| `SUPABASE_URL` | Scraper only | Supabase URL for Node.js scraper |
-| `SUPABASE_SERVICE_KEY` | Scraper only | Supabase service role key (admin) |
+
+### AsyncStorage Keys
+
+| Key | Purpose |
+| --- | --- |
+| `@jumbo_now_theme` | Theme preference (dark/light) |
+| `jumbonow_onboarding_done` | Onboarding completion flag |
+| `jumbonow_home_filters` | Home screen filter persistence |
+| `jumbonow_discover_filters` | Discover screen filter persistence |
+| `jumbonow_saved_events` | Saved/bookmarked event IDs |
+| `jumbonow_account_type` | Account type from registration |
 
 ---
 
-## 13. Scripts
+## 17. Scripts
 
-### Development
 ```bash
 npm start          # Start Expo dev server
 npm run ios        # Run on iOS simulator
 npm run android    # Run on Android emulator
 npm run web        # Run in browser
+npm test           # Run all tests (5 suites, 24 tests)
 ```
 
 ### Data Import
 ```bash
 node scripts/scrape-ocl.js    # Import events from Tufts OCL / tuftstickets.com
 ```
-
-The scraper fetches event data from the Tufts ticketing website, parses HTML for event details, enriches them with icons/colors/tags, and upserts into the Supabase `events` table using the service role key. Includes a hardcoded fallback list of known Tufts events.

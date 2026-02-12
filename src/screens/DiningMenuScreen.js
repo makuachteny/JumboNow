@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   SectionList,
+  ScrollView,
   StatusBar,
   ActivityIndicator,
   RefreshControl,
@@ -12,14 +13,31 @@ import {
   Platform,
   LayoutAnimation,
   UIManager,
+  Animated,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, ChevronDown, ChevronUp, ShoppingCart } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  ShoppingCart,
+  Flame,
+  Leaf,
+  Wheat,
+  Info,
+  X,
+  AlertTriangle,
+} from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { diningService } from '../services/dining.service';
 import { DINING_LOCATIONS, TRANSACT_LINKS } from '../data/diningLocations';
+import SmartIcon from '../components/SmartIcon';
 import BottomNav from '../components/BottomNav';
+
+const { width: SCREEN_W } = Dimensions.get('window');
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -34,26 +52,45 @@ const MEAL_EMOJI = {
   brunch: '\u{1F950}',
 };
 
+const MEAL_GRADIENT = {
+  breakfast: ['#F59E0B', '#D97706'],
+  lunch: ['#22C55E', '#16A34A'],
+  dinner: ['#8B5CF6', '#7C3AED'],
+  'late-night': ['#6366F1', '#4F46E5'],
+  daily: ['#0EA5E9', '#0284C7'],
+  brunch: ['#F472B6', '#EC4899'],
+};
+
+// Diet icon helper
+const DIET_ICONS = {
+  vegetarian: { label: 'V', color: '#22C55E', bg: '#22C55E18' },
+  vegan: { label: 'VG', color: '#16A34A', bg: '#16A34A18' },
+  'gluten-free': { label: 'GF', color: '#F59E0B', bg: '#F59E0B18' },
+  halal: { label: 'H', color: '#0EA5E9', bg: '#0EA5E918' },
+  kosher: { label: 'K', color: '#8B5CF6', bg: '#8B5CF618' },
+};
+
 export default function DiningMenuScreen({ navigation, route }) {
   const { slug, name } = route.params;
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const locationInfo = DINING_LOCATIONS.find((l) => l.slug === slug);
 
   const currentMealPeriod = diningService.getCurrentMealPeriod();
-  const [activeMeal, setActiveMeal] = useState(null); // set after loading
-  const [meals, setMeals] = useState([]); // array of { key, name, stations }
+  const [activeMeal, setActiveMeal] = useState(null);
+  const [meals, setMeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [expandedItems, setExpandedItems] = useState(new Set());
+  const [nutritionModal, setNutritionModal] = useState(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const loadMenu = useCallback(async () => {
     try {
       setError(null);
-      // First get schools to find this location's active_menu_types
       const schools = await diningService.getSchools();
       const school = schools.find((s) => s.slug === slug);
       const menuTypes = school?.active_menu_types || [];
@@ -66,11 +103,12 @@ export default function DiningMenuScreen({ navigation, route }) {
       const allMeals = await diningService.getAllMealsForDay(slug, menuTypes);
       setMeals(allMeals);
 
-      // Auto-select best tab: current meal if available, otherwise first with data
       if (allMeals.length > 0 && !activeMeal) {
         const currentMatch = allMeals.find((m) => m.key === currentMealPeriod);
         setActiveMeal(currentMatch ? currentMatch.key : allMeals[0].key);
       }
+
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     } catch (err) {
       setError('Could not load menu. Pull down to retry.');
     } finally {
@@ -80,7 +118,7 @@ export default function DiningMenuScreen({ navigation, route }) {
 
   useEffect(() => {
     loadMenu();
-  }, [slug]); // only reload when slug changes, not on every activeMeal change
+  }, [slug]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -105,13 +143,18 @@ export default function DiningMenuScreen({ navigation, route }) {
     return meal?.stations || [];
   }, [meals, activeMeal]);
 
-  // Build tabs from what the API actually has
+  const totalItems = useMemo(() => {
+    return sections.reduce((acc, s) => acc + s.data.length, 0);
+  }, [sections]);
+
   const mealTabs = useMemo(() => {
     return meals.map((m) => ({
       key: m.key,
       label: diningService.getMealPeriodLabel(m.key),
       emoji: MEAL_EMOJI[m.key] || '\u{1F37D}',
+      gradient: MEAL_GRADIENT[m.key] || ['#6AADE4', '#418FDE'],
       hasData: m.stations.length > 0,
+      itemCount: m.stations.reduce((acc, s) => acc + s.data.length, 0),
     }));
   }, [meals]);
 
@@ -131,116 +174,141 @@ export default function DiningMenuScreen({ navigation, route }) {
   const renderMenuItem = useCallback(({ item }) => {
     const isExpanded = expandedItems.has(item.id);
     const hasNutrition = item.calories !== null || item.protein !== null;
-    const hasDetails = hasNutrition || item.allergens?.length > 0 || item.ingredients;
+    const hasAllergens = item.allergens?.length > 0;
+    const hasDetails = hasNutrition || hasAllergens || item.ingredients;
+
+    // Determine diet badges from icons
+    const dietBadges = (item.icons || []).slice(0, 3);
 
     return (
-      <TouchableOpacity
-        style={styles.menuItem}
-        onPress={() => hasDetails && toggleExpand(item.id)}
-        activeOpacity={hasDetails ? 0.7 : 1}
-      >
-        <View style={styles.menuItemHeader}>
-          <View style={styles.menuItemInfo}>
-            <Text style={styles.menuItemName}>{item.name}</Text>
-            <View style={styles.menuItemBadges}>
-              {item.calories !== null && (
-                <View style={styles.calBadge}>
-                  <Text style={styles.calBadgeText}>{item.calories} cal</Text>
+      <Animated.View style={{ opacity: fadeAnim }}>
+        <TouchableOpacity
+          style={[styles.menuCard, isExpanded && styles.menuCardExpanded]}
+          onPress={() => hasDetails && toggleExpand(item.id)}
+          activeOpacity={hasDetails ? 0.7 : 1}
+          accessibilityLabel={`${item.name}${item.calories !== null ? `, ${item.calories} calories` : ''}${hasDetails ? ', tap to expand' : ''}`}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isExpanded }}
+        >
+          {/* Main row */}
+          <View style={styles.menuCardMain}>
+            <View style={styles.menuCardInfo}>
+              <Text style={styles.menuItemName}>{item.name}</Text>
+              <View style={styles.menuBadgeRow}>
+                {item.calories !== null && (
+                  <View style={styles.calorieBadge}>
+                    <Flame size={10} color="#F59E0B" />
+                    <Text style={styles.calorieBadgeText}>{item.calories} cal</Text>
+                  </View>
+                )}
+                {dietBadges.map((icon, i) => {
+                  const config = DIET_ICONS[icon.slug] || { label: icon.label?.slice(0, 2) || '?', color: '#6AADE4', bg: '#6AADE418' };
+                  return (
+                    <View key={i} style={[styles.dietPill, { backgroundColor: config.bg }]}>
+                      <Text style={[styles.dietPillText, { color: config.color }]}>{config.label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+            {hasDetails && (
+              <View style={styles.expandIcon}>
+                {isExpanded
+                  ? <ChevronUp size={16} color={colors.textMuted} />
+                  : <ChevronDown size={16} color={colors.textMuted} />
+                }
+              </View>
+            )}
+          </View>
+
+          {/* Expanded nutrition */}
+          {isExpanded && (
+            <View style={styles.expandedContent}>
+              {hasNutrition && (
+                <View style={styles.nutritionBar}>
+                  {item.calories !== null && (
+                    <View style={styles.nutritionChip}>
+                      <Text style={styles.nutritionChipValue}>{item.calories}</Text>
+                      <Text style={styles.nutritionChipLabel}>Cal</Text>
+                    </View>
+                  )}
+                  {item.protein !== null && (
+                    <View style={styles.nutritionChip}>
+                      <Text style={styles.nutritionChipValue}>{item.protein}g</Text>
+                      <Text style={styles.nutritionChipLabel}>Protein</Text>
+                    </View>
+                  )}
+                  {item.carbs !== null && (
+                    <View style={styles.nutritionChip}>
+                      <Text style={styles.nutritionChipValue}>{item.carbs}g</Text>
+                      <Text style={styles.nutritionChipLabel}>Carbs</Text>
+                    </View>
+                  )}
+                  {item.fat !== null && (
+                    <View style={styles.nutritionChip}>
+                      <Text style={styles.nutritionChipValue}>{item.fat}g</Text>
+                      <Text style={styles.nutritionChipLabel}>Fat</Text>
+                    </View>
+                  )}
+                  {item.fiber !== null && (
+                    <View style={styles.nutritionChip}>
+                      <Text style={styles.nutritionChipValue}>{item.fiber}g</Text>
+                      <Text style={styles.nutritionChipLabel}>Fiber</Text>
+                    </View>
+                  )}
+                  {item.sodium !== null && (
+                    <View style={styles.nutritionChip}>
+                      <Text style={styles.nutritionChipValue}>{item.sodium}mg</Text>
+                      <Text style={styles.nutritionChipLabel}>Sodium</Text>
+                    </View>
+                  )}
                 </View>
               )}
-              {item.icons?.map((icon, i) => (
-                <View key={i} style={styles.dietBadge}>
-                  <Text style={styles.dietBadgeText}>{icon.label}</Text>
+
+              {hasAllergens && (
+                <View style={styles.allergenSection}>
+                  <View style={styles.allergenHeader}>
+                    <AlertTriangle size={12} color="#EF4444" />
+                    <Text style={styles.allergenTitle}>Allergens</Text>
+                  </View>
+                  <View style={styles.allergenChipRow}>
+                    {item.allergens.map((a, i) => (
+                      <View key={i} style={styles.allergenChip}>
+                        <Text style={styles.allergenChipText}>
+                          {typeof a === 'string' ? a : a.name || a.label || ''}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-              ))}
+              )}
+
+              {item.ingredients && (
+                <View style={styles.ingredientSection}>
+                  <Text style={styles.ingredientLabel}>Ingredients</Text>
+                  <Text style={styles.ingredientText}>{item.ingredients}</Text>
+                </View>
+              )}
             </View>
-          </View>
-          {hasDetails && (
-            isExpanded
-              ? <ChevronUp size={16} color={colors.textMuted} />
-              : <ChevronDown size={16} color={colors.textMuted} />
           )}
-        </View>
-
-        {isExpanded && (
-          <View style={styles.expandedContent}>
-            {/* Nutrition table */}
-            {hasNutrition && (
-              <View style={styles.nutritionGrid}>
-                {item.calories !== null && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionValue}>{item.calories}</Text>
-                    <Text style={styles.nutritionLabel}>Calories</Text>
-                  </View>
-                )}
-                {item.protein !== null && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionValue}>{item.protein}g</Text>
-                    <Text style={styles.nutritionLabel}>Protein</Text>
-                  </View>
-                )}
-                {item.carbs !== null && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionValue}>{item.carbs}g</Text>
-                    <Text style={styles.nutritionLabel}>Carbs</Text>
-                  </View>
-                )}
-                {item.fat !== null && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionValue}>{item.fat}g</Text>
-                    <Text style={styles.nutritionLabel}>Fat</Text>
-                  </View>
-                )}
-                {item.fiber !== null && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionValue}>{item.fiber}g</Text>
-                    <Text style={styles.nutritionLabel}>Fiber</Text>
-                  </View>
-                )}
-                {item.sodium !== null && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionValue}>{item.sodium}mg</Text>
-                    <Text style={styles.nutritionLabel}>Sodium</Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Allergens */}
-            {item.allergens?.length > 0 && (
-              <View style={styles.allergenSection}>
-                <Text style={styles.detailLabel}>Allergens</Text>
-                <View style={styles.allergenRow}>
-                  {item.allergens.map((a, i) => (
-                    <View key={i} style={styles.allergenBadge}>
-                      <Text style={styles.allergenBadgeText}>
-                        {typeof a === 'string' ? a : a.name || a.label || ''}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Ingredients */}
-            {item.ingredients && (
-              <View style={styles.ingredientSection}>
-                <Text style={styles.detailLabel}>Ingredients</Text>
-                <Text style={styles.ingredientText}>{item.ingredients}</Text>
-              </View>
-            )}
-          </View>
-        )}
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
     );
-  }, [styles, colors, expandedItems, toggleExpand]);
+  }, [styles, colors, expandedItems, toggleExpand, fadeAnim]);
 
   const renderSectionHeader = useCallback(({ section }) => (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{section.title}</Text>
-      <Text style={styles.sectionCount}>{section.data.length} items</Text>
+      <View style={styles.sectionTitleRow}>
+        <View style={styles.sectionDot} />
+        <Text style={styles.sectionTitle}>{section.title}</Text>
+      </View>
+      <View style={styles.sectionCountBadge}>
+        <Text style={styles.sectionCount}>{section.data.length}</Text>
+      </View>
     </View>
   ), [styles]);
+
+  const activeMealGradient = MEAL_GRADIENT[activeMeal] || ['#6AADE4', '#418FDE'];
 
   return (
     <LinearGradient colors={colors.backgroundGradient} style={styles.container}>
@@ -248,42 +316,67 @@ export default function DiningMenuScreen({ navigation, route }) {
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
           <ArrowLeft size={22} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerEmoji}>{locationInfo?.emoji || '\u{1F37D}'}</Text>
-          <Text style={styles.headerTitle} numberOfLines={1}>{name}</Text>
+          <SmartIcon value={locationInfo?.image || locationInfo?.emoji || '\u{1F37D}'} size={32} borderRadius={10} />
+          <View>
+            <Text style={styles.headerTitle} numberOfLines={1}>{name}</Text>
+            {!loading && totalItems > 0 && (
+              <Text style={styles.headerSubtitle}>{totalItems} items today</Text>
+            )}
+          </View>
         </View>
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Meal period tabs */}
-      <View style={styles.mealTabRow}>
+      {/* Meal period tabs — horizontal scroll with gradient cards */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.mealTabScrollContent}
+      >
         {mealTabs.map((tab) => {
           const isActive = activeMeal === tab.key;
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[
-                styles.mealTab,
-                isActive && styles.mealTabActive,
-                tab.hasData === false && styles.mealTabEmpty,
-              ]}
+              style={[styles.mealTabCard, !tab.hasData && styles.mealTabCardEmpty]}
               onPress={() => setActiveMeal(tab.key)}
+              activeOpacity={0.7}
+              accessibilityLabel={`${tab.label}${tab.hasData ? `, ${tab.itemCount} items` : ', no items'}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
             >
-              <Text style={styles.mealTabEmoji}>{tab.emoji}</Text>
-              <Text style={[
-                styles.mealTabText,
-                isActive && styles.mealTabTextActive,
-                tab.hasData === false && styles.mealTabTextEmpty,
-              ]}>
-                {tab.label}
-              </Text>
+              {isActive ? (
+                <LinearGradient
+                  colors={tab.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.mealTabGradient}
+                >
+                  <Text style={styles.mealTabEmojiActive}>{tab.emoji}</Text>
+                  <Text style={styles.mealTabLabelActive}>{tab.label}</Text>
+                  {tab.hasData && (
+                    <Text style={styles.mealTabCountActive}>{tab.itemCount} items</Text>
+                  )}
+                </LinearGradient>
+              ) : (
+                <View style={[styles.mealTabInner, { borderColor: tab.hasData ? colors.cardBorder : colors.glassBorder }]}>
+                  <Text style={styles.mealTabEmoji}>{tab.emoji}</Text>
+                  <Text style={[styles.mealTabLabel, !tab.hasData && styles.mealTabLabelMuted]}>
+                    {tab.label}
+                  </Text>
+                  {tab.hasData && (
+                    <Text style={styles.mealTabCount}>{tab.itemCount}</Text>
+                  )}
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* Menu content */}
       <SectionList
@@ -292,7 +385,7 @@ export default function DiningMenuScreen({ navigation, route }) {
         renderItem={renderMenuItem}
         renderSectionHeader={renderSectionHeader}
         contentContainerStyle={[styles.listContent, {
-          paddingBottom: insets.bottom + (locationInfo?.hasOrdering ? 130 : 90),
+          paddingBottom: insets.bottom + (locationInfo?.hasOrdering ? 140 : 90),
         }]}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
@@ -301,7 +394,10 @@ export default function DiningMenuScreen({ navigation, route }) {
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator color={colors.accent} style={{ marginTop: 60 }} />
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator color={colors.accent} size="large" />
+              <Text style={styles.loadingText}>Loading today's menu...</Text>
+            </View>
           ) : error ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>{'\u{1F615}'}</Text>
@@ -322,12 +418,19 @@ export default function DiningMenuScreen({ navigation, route }) {
         }
       />
 
-      {/* Order on Transact button */}
+      {/* Order on Transact floating button */}
       {locationInfo?.hasOrdering && (
         <View style={[styles.orderBarWrap, { paddingBottom: Math.max(insets.bottom, 16) + 70 }]}>
-          <TouchableOpacity style={styles.orderBar} onPress={openTransact} activeOpacity={0.85}>
-            <ShoppingCart size={18} color="#FFF" />
-            <Text style={styles.orderBarText}>Order on Transact</Text>
+          <TouchableOpacity style={styles.orderBar} onPress={openTransact} activeOpacity={0.85} accessibilityLabel="Order on Transact" accessibilityRole="button">
+            <LinearGradient
+              colors={activeMealGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.orderBarGradient}
+            >
+              <ShoppingCart size={20} color="#FFF" />
+              <Text style={styles.orderBarText}>Order on Transact</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       )}
@@ -337,73 +440,85 @@ export default function DiningMenuScreen({ navigation, route }) {
   );
 }
 
-const createStyles = (colors) => StyleSheet.create({
+const createStyles = (colors, isDark) => StyleSheet.create({
   container: { flex: 1 },
 
   // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.headerBg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.cardBorder,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
   },
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 14,
-    backgroundColor: colors.inputBg,
+    backgroundColor: colors.glass,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.glassBorder,
   },
   headerCenter: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
   },
-  headerEmoji: { fontSize: 22 },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: colors.text },
-  headerSpacer: { width: 40 },
+  headerEmoji: { fontSize: 28 },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: colors.text, letterSpacing: -0.3 },
+  headerSubtitle: { fontSize: 12, fontWeight: '600', color: colors.textTertiary, marginTop: 1 },
+  headerSpacer: { width: 42 },
 
-  // Meal tabs
-  mealTabRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
+  // Meal tabs — horizontal scroll cards
+  mealTabScrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    gap: 10,
   },
-  mealTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
+  mealTabCard: {
     borderRadius: 12,
-    backgroundColor: colors.headerBg,
-    borderWidth: 1.5,
-    borderColor: colors.accentBorder,
+    overflow: 'hidden',
+    minWidth: 80,
   },
-  mealTabActive: {
-    backgroundColor: colors.buttonPrimary,
-    borderColor: colors.buttonPrimary,
-  },
-  mealTabEmpty: {
+  mealTabCardEmpty: {
     opacity: 0.5,
   },
-  mealTabEmoji: { fontSize: 14 },
-  mealTabText: { fontSize: 12, fontWeight: '700', color: colors.text },
-  mealTabTextActive: { color: '#FFF' },
-  mealTabTextEmpty: { color: colors.textMuted },
+  mealTabGradient: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    gap: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  mealTabInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    gap: 2,
+  },
+  mealTabEmoji: { fontSize: 18 },
+  mealTabEmojiActive: { fontSize: 18 },
+  mealTabLabel: { fontSize: 11, fontWeight: '700', color: colors.text },
+  mealTabLabelActive: { fontSize: 11, fontWeight: '800', color: '#FFF' },
+  mealTabLabelMuted: { color: colors.textMuted },
+  mealTabCount: { fontSize: 10, fontWeight: '600', color: colors.textMuted },
+  mealTabCountActive: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
 
   // List
-  listContent: { paddingHorizontal: 16, paddingTop: 4 },
+  listContent: { paddingHorizontal: 20, paddingTop: 0 },
 
   // Section header
   sectionHeader: {
@@ -411,39 +526,97 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 10,
-    paddingHorizontal: 4,
     marginTop: 8,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
-  sectionCount: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  sectionCountBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: colors.accentBg,
+  },
+  sectionCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.accent,
+  },
 
   // Menu item card
-  menuItem: {
+  menuCard: {
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  menuItemHeader: { flexDirection: 'row', alignItems: 'center' },
-  menuItemInfo: { flex: 1 },
-  menuItemName: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 4 },
-  menuItemBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  calBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: 'rgba(245,158,11,0.12)',
+  menuCardExpanded: {
+    borderColor: colors.accentBorder,
   },
-  calBadgeText: { fontSize: 10, fontWeight: '700', color: '#F59E0B' },
-  dietBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: 'rgba(34,197,94,0.12)',
+  menuCardMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  dietBadgeText: { fontSize: 10, fontWeight: '700', color: '#22C55E' },
+  menuCardInfo: { flex: 1, gap: 6 },
+  menuItemName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.2,
+  },
+  menuBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  calorieBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: '#F59E0B15',
+  },
+  calorieBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F59E0B',
+  },
+  dietPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  dietPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  expandIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
 
   // Expanded nutrition content
   expandedContent: {
@@ -451,39 +624,88 @@ const createStyles = (colors) => StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.cardBorder,
-    gap: 12,
+    gap: 14,
   },
-  nutritionGrid: {
+  nutritionBar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  nutritionItem: {
+  nutritionChip: {
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     backgroundColor: colors.inputBg,
-    minWidth: 70,
+    minWidth: 68,
   },
-  nutritionValue: { fontSize: 14, fontWeight: '800', color: colors.text },
-  nutritionLabel: { fontSize: 10, fontWeight: '500', color: colors.textMuted, marginTop: 2 },
+  nutritionChipValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  nutritionChipLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginTop: 2,
+  },
 
   // Allergens
-  allergenSection: { gap: 6 },
-  detailLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
-  allergenRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  allergenBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: 'rgba(239,68,68,0.1)',
+  allergenSection: { gap: 8 },
+  allergenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  allergenBadgeText: { fontSize: 10, fontWeight: '700', color: '#EF4444' },
+  allergenTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  allergenChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  allergenChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.15)',
+  },
+  allergenChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
 
   // Ingredients
   ingredientSection: { gap: 4 },
-  ingredientText: { fontSize: 12, lineHeight: 17, color: colors.textMuted },
+  ingredientLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  ingredientText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textMuted,
+  },
+
+  // Loading
+  loadingWrap: {
+    alignItems: 'center',
+    paddingTop: 80,
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
 
   // Empty
   emptyState: { alignItems: 'center', paddingTop: 80, gap: 10 },
@@ -497,22 +719,30 @@ const createStyles = (colors) => StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
   },
   orderBar: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  orderBarGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 16,
-    backgroundColor: '#F59E0B',
-    shadowColor: '#F59E0B',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 10,
+    gap: 10,
+    paddingVertical: 18,
+    borderRadius: 18,
   },
-  orderBarText: { fontSize: 16, fontWeight: '800', color: '#FFF' },
+  orderBarText: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: -0.3,
+  },
 });

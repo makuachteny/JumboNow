@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CommonActions } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import { Calendar, Users, Map, Ticket, User } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
@@ -36,6 +37,15 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
     }).start();
   }, [visible]);
 
+  const handleTabPress = (tabId) => {
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: tabId }],
+      })
+    );
+  };
+
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ translateY: slideUp }], opacity: hideAnim, pointerEvents: visible ? 'auto' : 'none' }]}>
       {Platform.OS === 'ios' ? (
@@ -57,7 +67,7 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
                 <TouchableOpacity
                   key={tab.id}
                   style={styles.centerTab}
-                  onPress={() => { if (!isActive) navigation.navigate(tab.id); }}
+                  onPress={() => handleTabPress(tab.id)}
                 >
                   <View style={[styles.centerButton, {
                     backgroundColor: isActive ? colors.accent : colors.buttonPrimary,
@@ -73,7 +83,7 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
               <TouchableOpacity
                 key={tab.id}
                 style={styles.tab}
-                onPress={() => { if (!isActive) navigation.navigate(tab.id); }}
+                onPress={() => handleTabPress(tab.id)}
               >
                 <View style={[styles.iconWrap, isActive && { backgroundColor: colors.accentBg }]}>
                   <Icon
@@ -109,7 +119,7 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
                 <TouchableOpacity
                   key={tab.id}
                   style={styles.centerTab}
-                  onPress={() => { if (!isActive) navigation.navigate(tab.id); }}
+                  onPress={() => handleTabPress(tab.id)}
                 >
                   <View style={[styles.centerButton, {
                     backgroundColor: isActive ? colors.accent : colors.buttonPrimary,
@@ -124,7 +134,7 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
               <TouchableOpacity
                 key={tab.id}
                 style={styles.tab}
-                onPress={() => { if (!isActive) navigation.navigate(tab.id); }}
+                onPress={() => handleTabPress(tab.id)}
               >
                 <View style={[styles.iconWrap, isActive && { backgroundColor: colors.accentBg }]}>
                   <Icon

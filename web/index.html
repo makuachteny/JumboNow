@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JumboNow - The Tufts Campus App</title>
+  <meta name="description" content="JumboNow connects the Tufts University community. Events, dining, shuttles, friends, and more.">
+  <meta name="theme-color" content="#0B1A3B">
+  <link rel="icon" href="assets/jumbo-logo.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0B1A3B;--bg1:#0D1E42;--bg2:#0F2149;--bg3:#112450;--card:#132856;--accent:#6AADE4;--accentB:#3E8EDE;--accentG:rgba(62,142,222,0.12);--text:#FFF;--muted:#8BB5DA;--dim:#5A8AB5;--green:#34D399;--yellow:#FBBF24;--red:#EF4444;--purple:#A855F7;--pink:#EC4899;--orange:#F97316}
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+    .band{height:4px;background:linear-gradient(90deg,#1A3A6E,var(--accentB),#6AADE4,var(--accentB),#1A3A6E)}
+
+    /* NAV */
+    nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:0 40px;height:72px;display:flex;align-items:center;justify-content:space-between;background:rgba(11,26,59,0.92);backdrop-filter:blur(20px);border-bottom:1px solid rgba(106,173,228,0.08);transition:all .3s}
+    nav.scrolled{background:rgba(11,26,59,0.98);box-shadow:0 4px 30px rgba(0,0,0,.4)}
+    .nav-brand{display:flex;align-items:center;gap:12px;text-decoration:none}
+    .nav-brand img{width:38px;height:38px;border-radius:10px}
+    .nav-brand span{font-size:22px;font-weight:900;color:var(--text);letter-spacing:-.5px}
+    .nav-brand .hl{color:var(--accent)}
+    .nav-links{display:flex;align-items:center;gap:28px;list-style:none}
+    .nav-links a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;transition:color .2s}
+    .nav-links a:hover{color:var(--text)}
+    .nav-cta{padding:10px 22px;background:var(--accentB);color:#FFF!important;border-radius:12px;font-weight:700;font-size:14px;transition:all .2s;border:none;cursor:pointer}
+    .nav-cta:hover{background:#5BA0E0;transform:translateY(-1px);box-shadow:0 4px 20px rgba(62,142,222,.5)}
+    .mob-btn{display:none;background:none;border:none;cursor:pointer;padding:8px}
+    .mob-btn span{display:block;width:24px;height:2px;background:var(--text);margin:5px 0;border-radius:2px}
+
+    /* HERO */
+    .hero{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:120px 40px 80px;overflow:hidden}
+    .hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(62,142,222,.15) 0%,transparent 60%),radial-gradient(ellipse 60% 50% at 80% 50%,rgba(106,173,228,.08) 0%,transparent 50%),var(--bg)}
+    .hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(106,173,228,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(106,173,228,.04) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 70% 60% at 50% 40%,black 20%,transparent 70%)}
+    .particles{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+    .particle{position:absolute;width:4px;height:4px;background:var(--accent);border-radius:50%;opacity:0;animation:fup 8s infinite}
+    @keyframes fup{0%{opacity:0;transform:translateY(100vh) scale(0)}10%{opacity:.5}90%{opacity:.2}100%{opacity:0;transform:translateY(-10vh) scale(1)}}
+    .hero-content{position:relative;max-width:1200px;width:100%;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+    .hero-text{max-width:560px}
+    .badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;background:var(--accentG);border:1px solid rgba(106,173,228,.2);border-radius:100px;font-size:13px;font-weight:600;color:var(--accent);margin-bottom:28px}
+    .pulse{width:8px;height:8px;background:var(--green);border-radius:50%;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+    .hero h1{font-size:64px;font-weight:900;line-height:1.05;letter-spacing:-2.5px;margin-bottom:24px}
+    .grad{background:linear-gradient(135deg,#9ED4F5,#6AADE4,#3E8EDE);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero-desc{font-size:18px;line-height:1.7;color:var(--muted);margin-bottom:40px;max-width:480px}
+    .hero-actions{display:flex;gap:16px;margin-bottom:48px}
+    .btn-p{display:inline-flex;align-items:center;gap:10px;padding:16px 32px;background:var(--accentB);color:#FFF;border-radius:14px;font-weight:800;font-size:16px;text-decoration:none;transition:all .25s;border:none;cursor:pointer}
+    .btn-p:hover{background:#5BA0E0;transform:translateY(-2px);box-shadow:0 8px 30px rgba(62,142,222,.5)}
+    .btn-s{display:inline-flex;align-items:center;gap:10px;padding:16px 32px;background:rgba(106,173,228,.1);color:var(--accent);border:1.5px solid rgba(106,173,228,.25);border-radius:14px;font-weight:700;font-size:16px;text-decoration:none;transition:all .25s;cursor:pointer}
+    .btn-s:hover{background:rgba(106,173,228,.18);transform:translateY(-2px)}
+    .hero-stats{display:flex;gap:40px}
+    .hs-v{font-size:28px;font-weight:900;letter-spacing:-1px}
+    .hs-l{font-size:13px;color:var(--dim);font-weight:600;margin-top:2px}
+
+    /* PHONE CAROUSEL */
+    .hero-phones{position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;height:620px}
+    .phone-glow{position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(62,142,222,.25),transparent 65%);border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%);animation:gpulse 4s ease-in-out infinite;pointer-events:none}
+    @keyframes gpulse{0%,100%{opacity:.5;transform:translate(-50%,-50%) scale(1)}50%{opacity:.8;transform:translate(-50%,-50%) scale(1.1)}}
+    .carousel-phone{position:relative;width:290px;height:580px;border-radius:44px;background:#081430;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(106,173,228,.1),inset 0 1px 0 rgba(255,255,255,.04);overflow:hidden;animation:float 6s ease-in-out infinite}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+    .carousel-notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:100px;height:28px;background:#081430;border-radius:0 0 16px 16px;z-index:20}
+    .carousel-track{display:flex;height:100%;transition:transform .45s cubic-bezier(.25,.46,.45,.94);will-change:transform}
+    .carousel-slide{min-width:100%;height:100%;display:flex;flex-direction:column;padding:52px 20px 20px;overflow:hidden;user-select:none;-webkit-user-select:none}
+    .cs-header{margin-bottom:12px}
+    .cs-title{font-size:18px;font-weight:900;color:#FFF;margin-bottom:2px;letter-spacing:-.3px}
+    .cs-sub{font-size:11px;color:#8BA3C0}
+    .cs-body{flex:1;overflow:hidden;display:flex;flex-direction:column;gap:6px}
+    .cs-item{padding:10px 12px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:12px;display:flex;align-items:center;gap:10px}
+    .cs-item-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+    .cs-item-info{flex:1;min-width:0}
+    .cs-item-name{font-size:12px;font-weight:700;color:#FFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cs-item-detail{font-size:9px;color:#5A7A9B}
+    .cs-item-badge{padding:2px 7px;border-radius:5px;font-size:8px;font-weight:700;flex-shrink:0}
+    .cs-pills{display:flex;gap:5px;margin-bottom:10px}
+    .cs-pill{padding:6px 10px;border-radius:8px;font-size:10px;font-weight:700;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.08);color:#5A7A9B}
+    .cs-pill.active{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.3);color:#34D399}
+    .cs-ff{padding:10px;background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(239,68,68,.06));border:1px solid rgba(249,115,22,.18);border-radius:12px;display:flex;flex-direction:column;gap:4px}
+    .cs-ff-row{display:flex;align-items:center;gap:8px}
+    .cs-ff-name{flex:1;font-size:12px;font-weight:700;color:#FFF}
+    .cs-ff-loc{font-size:9px;color:#8BA3C0}
+    .cs-ff-time{font-size:9px;color:#F97316;font-weight:600}
+    .cs-ff-badge{padding:2px 6px;border-radius:5px;background:rgba(52,211,153,.15);color:#34D399;font-size:8px;font-weight:700}
+    .cs-notif{padding:8px 10px;background:rgba(106,173,228,.05);border:1px solid rgba(106,173,228,.08);border-radius:10px;display:flex;align-items:center;gap:8px}
+    .cs-notif.unread{background:rgba(106,173,228,.08);border-color:rgba(106,173,228,.15)}
+    .cs-notif-ico{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+    .cs-notif-text{flex:1;font-size:10px;color:#8BA3C0;line-height:1.3}.cs-notif-text strong{color:#FFF}
+    .cs-notif-time{font-size:8px;color:#5A7A9B;white-space:nowrap}
+    .cs-profile{text-align:center;padding:16px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:14px;margin-bottom:8px}
+    .cs-avatar{width:48px;height:48px;border-radius:14px;background:var(--accentB);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:#FFF;margin:0 auto 8px}
+    .cs-pstats{display:flex;justify-content:center;gap:20px;margin-top:8px}
+    .cs-pstat-v{font-size:16px;font-weight:900}.cs-pstat-l{font-size:8px;color:#5A7A9B;font-weight:600}
+    .cs-res{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+    .cs-rb{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px;background:rgba(106,173,228,.04);border:1px solid rgba(106,173,228,.06);border-radius:8px}
+    .cs-rb span:first-child{font-size:18px}.cs-rb span:last-child{font-size:8px;font-weight:700;color:#5A7A9B}
+    .cs-friend{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(106,173,228,.04);border:1px solid rgba(106,173,228,.06);border-radius:10px}
+    .cs-friend-av{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#FFF;flex-shrink:0}
+    .cs-friend-name{font-size:12px;font-weight:700;color:#FFF}.cs-friend-sub{font-size:9px;color:#5A7A9B}
+    .cs-friend-btn{padding:4px 10px;border-radius:7px;background:var(--accentB);color:#FFF;font-size:9px;font-weight:700;border:none;margin-left:auto;flex-shrink:0}
+    .cs-map-item{padding:10px;background:rgba(106,173,228,.05);border:1px solid rgba(106,173,228,.08);border-radius:10px;display:flex;align-items:center;gap:8px}
+    .cs-map-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+    .cs-ticket{padding:14px;background:linear-gradient(135deg,rgba(106,173,228,.08),rgba(168,85,247,.06));border:1px solid rgba(106,173,228,.12);border-radius:14px;text-align:center}
+    .cs-qr{width:80px;height:80px;margin:0 auto 10px;background:#FFF;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#000;font-weight:700;letter-spacing:.5px;position:relative;overflow:hidden}
+    .cs-qr::before{content:'';position:absolute;inset:6px;background:repeating-conic-gradient(#000 0% 25%, #fff 0% 50%) 0 0/8px 8px;opacity:.3}
+    .cs-achieve{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.12);border-radius:12px}
+    .cs-achieve-ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    /* Carousel controls */
+    .carousel-wrap{position:relative;display:flex;flex-direction:column;align-items:center}
+    .carousel-arrows{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:380px;display:flex;justify-content:space-between;pointer-events:none;z-index:10}
+    .carousel-arrow{width:40px;height:40px;border-radius:50%;background:rgba(11,26,59,.9);border:1px solid rgba(106,173,228,.15);color:var(--accent);display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;transition:all .2s;backdrop-filter:blur(8px);font-size:18px}
+    .carousel-arrow:hover{background:rgba(11,26,59,.95);border-color:rgba(106,173,228,.4);transform:scale(1.1)}
+    .carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:20px}
+    .carousel-dot{width:8px;height:8px;border-radius:50%;background:rgba(106,173,228,.2);cursor:pointer;transition:all .3s}
+    .carousel-dot.active{background:var(--accent);width:24px;border-radius:4px}
+    .carousel-label{text-align:center;margin-top:12px;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.3px;transition:opacity .3s}
+
+    /* SECTIONS */
+    .sec{padding:120px 40px;position:relative}
+    .sec-alt{background:#0D1E42}
+    .sec-hdr{text-align:center;max-width:640px;margin:0 auto 80px}
+    .sec-label{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;background:var(--accentG);border:1px solid rgba(106,173,228,.15);border-radius:100px;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:20px;text-transform:uppercase;letter-spacing:1px}
+    .sec-title{font-size:48px;font-weight:900;letter-spacing:-2px;line-height:1.1;margin-bottom:20px}
+    .sec-sub{font-size:18px;color:var(--muted);line-height:1.6}
+
+    /* FEATURES GRID */
+    .fg{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:1100px;margin:0 auto}
+    .fc{padding:32px 24px;background:rgba(255,255,255,.03);border:1px solid rgba(106,173,228,.08);border-radius:20px;transition:all .3s;cursor:default}
+    .fc:hover{transform:translateY(-4px);border-color:rgba(106,173,228,.2);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+    .fc-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:16px}
+    .fc h3{font-size:17px;font-weight:800;margin-bottom:8px;letter-spacing:-.3px}
+    .fc p{font-size:13px;color:var(--muted);line-height:1.6}
+    .fc:nth-child(1){transition-delay:0s}.fc:nth-child(2){transition-delay:.06s}.fc:nth-child(3){transition-delay:.12s}
+    .fc:nth-child(4){transition-delay:.18s}.fc:nth-child(5){transition-delay:.24s}.fc:nth-child(6){transition-delay:.3s}
+    .fc:nth-child(7){transition-delay:.36s}.fc:nth-child(8){transition-delay:.42s}.fc:nth-child(9){transition-delay:.48s}
+    .fc:nth-child(10){transition-delay:.54s}.fc:nth-child(11){transition-delay:.6s}.fc:nth-child(12){transition-delay:.66s}
+
+    /* SHOWCASE */
+    .show-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;max-width:1100px;margin:0 auto;align-items:center}
+    .show-grid.rev{direction:rtl}.show-grid.rev>*{direction:ltr}
+    .show-phone{display:flex;justify-content:center}
+    .show-phone .pf{width:300px;border-radius:40px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.3),0 0 0 1px rgba(106,173,228,.1)}
+    .show-phone .pf img{width:100%;display:block}
+    .show-text h2{font-size:40px;font-weight:900;letter-spacing:-1.5px;line-height:1.1;margin-bottom:20px}
+    .show-text p{font-size:16px;color:var(--muted);line-height:1.7;margin-bottom:28px}
+    .sf-list{display:flex;flex-direction:column;gap:12px}
+    .sf{display:flex;align-items:center;gap:14px;padding:14px 18px;background:rgba(255,255,255,.04);border:1px solid rgba(106,173,228,.08);border-radius:14px}
+    .sf-i{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+    .sf-t{font-size:14px;font-weight:600;color:var(--muted)}.sf-t strong{color:var(--text)}
+
+    /* DOWNLOAD */
+    .dl{padding:120px 40px;background:#0D1E42;position:relative;overflow:hidden}
+    .dl-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:600px;background:radial-gradient(circle,rgba(62,142,222,.1),transparent 60%);pointer-events:none}
+    .dl-content{position:relative;text-align:center;max-width:700px;margin:0 auto}
+    .dl-content h2{font-size:48px;font-weight:900;letter-spacing:-2px;margin-bottom:20px}
+    .dl-content p{font-size:18px;color:var(--muted);line-height:1.6;margin-bottom:40px}
+    .store-row{display:flex;justify-content:center;gap:16px;margin-bottom:48px;flex-wrap:wrap}
+    .store-btn{display:inline-block;text-decoration:none;transition:all .25s;border-radius:12px}
+    .store-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.3)}
+    .store-btn img{height:54px;display:block}
+    .dl-div{display:flex;align-items:center;gap:16px;margin-bottom:32px}
+    .dl-div::before,.dl-div::after{content:'';flex:1;height:1px;background:rgba(106,173,228,.2)}
+    .dl-div span{color:var(--dim);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+
+    /* FOOTER */
+    footer{padding:60px 40px 40px;background:#091632;border-top:1px solid rgba(106,173,228,.1)}
+    .ft{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+    .ft-brand{display:flex;align-items:center;gap:10px}
+    .ft-brand img{width:32px;height:32px;border-radius:8px}
+    .ft-brand span{font-weight:800;font-size:18px}
+    .ft-text{color:var(--dim);font-size:13px}
+    .ft-links{display:flex;gap:24px}
+    .ft-links a{color:var(--dim);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+    .ft-links a:hover{color:var(--accent)}
+
+    /* FADE */
+    .fu{opacity:0;transform:translateY(30px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)}
+    .fu.visible{opacity:1;transform:translateY(0)}
+
+    /* WEBAPP OVERLAY */
+    .wa-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(8,18,42,.96);backdrop-filter:blur(10px);justify-content:center;align-items:center;padding:40px;opacity:0;transition:opacity .3s}
+    .wa-overlay.active{display:flex;opacity:1}
+    .wa{width:100%;max-width:420px;height:85vh;max-height:850px;background:#0B1A3B;border-radius:36px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.4),0 0 0 1px rgba(106,173,228,.1);display:flex;flex-direction:column;position:relative}
+    .wa-x{position:absolute;top:-48px;right:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:white;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;transition:all .2s}
+    .wa-x:hover{background:rgba(255,255,255,.2)}
+    .wa-hdr{padding:48px 24px 16px;text-align:center}
+    .wa-hdr img{width:48px;height:48px;border-radius:12px;margin-bottom:10px}
+    .wa-hdr h2{font-size:22px;font-weight:900;letter-spacing:-.5px;margin-bottom:4px}
+    .wa-hdr p{color:var(--muted);font-size:12px}
+    .wa-body{flex:1;padding:0 16px 16px;overflow-y:auto}
+    .wa-sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin:16px 0 8px}
+    .wa-card{padding:14px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:14px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+    .wa-card:hover{background:rgba(106,173,228,.1);border-color:rgba(106,173,228,.2)}
+    .wa-card:active{transform:scale(.98)}
+    .wa-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .wa-ico{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .wa-info h4{font-size:14px;font-weight:700;letter-spacing:-.2px}
+    .wa-info span{font-size:11px;color:var(--muted)}
+    .wa-meta{display:flex;gap:12px;font-size:10px;color:var(--dim)}
+    .wa-qa{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
+    .wa-qb{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.08);border-radius:12px;cursor:pointer;transition:all .2s}
+    .wa-qb:hover{background:rgba(106,173,228,.12)}
+    .wa-qb.active{background:rgba(106,173,228,.15);border-color:var(--accent)}
+    .wa-qb span:first-child{font-size:20px}
+    .wa-qb span:last-child{font-size:9px;font-weight:700;color:var(--muted)}
+    .wa-qb.active span:last-child{color:var(--accent)}
+    .wa-di{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:12px;margin-bottom:6px}
+    .wa-dl{display:flex;align-items:center;gap:10px}
+    .wa-dl span:first-child{font-size:22px}
+    .wa-dn{font-size:13px;font-weight:700}.wa-dt{font-size:10px;color:var(--dim)}
+    .wa-st{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700}
+    .wa-st.o{background:rgba(52,211,153,.15);color:#34D399}.wa-st.c{background:rgba(239,68,68,.15);color:#EF4444}
+    .wa-nav{display:flex;padding:10px 6px 22px;border-top:1px solid rgba(106,173,228,.08);background:#0B1A3B}
+    .wa-nb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--dim);font-size:9px;font-weight:600;cursor:pointer;background:none;border:none;padding:4px;transition:color .2s;font-family:inherit}
+    .wa-nb:hover,.wa-nb.active{color:var(--accent)}
+    .wa-nb svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
+    /* Free food special */
+    .wa-ff{padding:12px;background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(239,68,68,.08));border:1px solid rgba(249,115,22,.2);border-radius:14px;margin-bottom:8px}
+    .wa-ff-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .wa-ff-badge{padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:#34D399;font-size:9px;font-weight:700}
+    .wa-ff-loc{font-size:10px;color:var(--dim);display:flex;align-items:center;gap:4px}
+    .wa-ff-time{font-size:10px;color:var(--orange);font-weight:600}
+    /* Profile card */
+    .wa-profile{text-align:center;padding:20px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:16px;margin-bottom:10px}
+    .wa-avatar{width:56px;height:56px;border-radius:16px;background:var(--accentB);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#FFF;margin:0 auto 10px}
+    .wa-pname{font-size:16px;font-weight:800;margin-bottom:2px}
+    .wa-puser{font-size:12px;color:var(--muted);margin-bottom:8px}
+    .wa-pstats{display:flex;justify-content:center;gap:24px;margin-top:10px}
+    .wa-pstat{text-align:center}
+    .wa-pstat-v{font-size:18px;font-weight:900}
+    .wa-pstat-l{font-size:9px;color:var(--dim);font-weight:600}
+    /* Notification item */
+    .wa-notif{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(106,173,228,.04);border:1px solid rgba(106,173,228,.06);border-radius:12px;margin-bottom:6px}
+    .wa-notif.unread{background:rgba(106,173,228,.08);border-color:rgba(106,173,228,.15)}
+    .wa-notif-ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+    .wa-notif-text{flex:1;font-size:12px;color:var(--muted);line-height:1.4}
+    .wa-notif-text strong{color:var(--text)}
+    .wa-notif-time{font-size:10px;color:var(--dim);white-space:nowrap}
+    /* Friend item */
+    .wa-friend{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(106,173,228,.04);border:1px solid rgba(106,173,228,.06);border-radius:12px;margin-bottom:6px}
+    .wa-friend-av{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#FFF;flex-shrink:0}
+    .wa-friend-info{flex:1}
+    .wa-friend-name{font-size:13px;font-weight:700}
+    .wa-friend-sub{font-size:10px;color:var(--dim)}
+    .wa-friend-btn{padding:5px 12px;border-radius:8px;background:var(--accentB);color:#FFF;font-size:10px;font-weight:700;border:none;cursor:pointer}
+    /* Resource grid */
+    .wa-res{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .wa-rb{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;background:rgba(106,173,228,.04);border:1px solid rgba(106,173,228,.06);border-radius:10px;cursor:pointer;transition:all .2s;text-decoration:none}
+    .wa-rb:hover{background:rgba(106,173,228,.1)}
+    .wa-rb span:first-child{font-size:22px}
+    .wa-rb span:last-child{font-size:9px;font-weight:700;color:var(--muted);text-align:center}
+
+    /* RESPONSIVE */
+    @media(max-width:1024px){
+      .hero-content{grid-template-columns:1fr;text-align:center;gap:60px}
+      .hero-text{max-width:100%;margin:0 auto}.hero h1{font-size:48px}
+      .hero-desc{margin:0 auto 40px}.hero-actions{justify-content:center}.hero-stats{justify-content:center}
+      .hero-phones{height:540px}.carousel-phone{width:250px;height:500px}.carousel-arrows{width:340px}
+      .fg{grid-template-columns:repeat(2,1fr)}.show-grid{grid-template-columns:1fr;gap:40px}.show-grid.rev{direction:ltr}
+    }
+    @media(max-width:768px){
+      nav{padding:0 20px}.nav-links{display:none}.mob-btn{display:block}
+      .hero{padding:100px 20px 60px}.hero h1{font-size:36px;letter-spacing:-1.5px}.hero-desc{font-size:16px}
+      .hero-actions{flex-direction:column;align-items:center}.hero-stats{gap:24px}
+      .hero-phones{height:480px}.carousel-phone{width:220px;height:440px}.carousel-arrows{width:300px}.carousel-arrow{width:34px;height:34px;font-size:16px}
+      .sec{padding:80px 20px}.sec-title{font-size:32px}.fg{grid-template-columns:1fr}
+      .show-text h2{font-size:28px}.show-phone .pf{width:240px}
+      .dl-content h2{font-size:32px}.store-row{flex-direction:column;align-items:center}
+      .ft{flex-direction:column;gap:20px;text-align:center}
+    }
+  </style>
+</head>
+<body>
+<div class="band"></div>
+
+<!-- NAV -->
+<nav id="navbar">
+  <a href="#" class="nav-brand"><img src="assets/jumbo-logo.png" alt="JumboNow"><span>Jumbo<span class="hl">Now</span></span></a>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#dining-sec">Dining</a></li>
+    <li><a href="#shuttle-sec">Shuttles</a></li>
+    <li><a href="#social-sec">Social</a></li>
+    <li><a href="#download">Download</a></li>
+    <li><a href="#" class="nav-cta" onclick="openWebApp();return false;">Open Web App</a></li>
+  </ul>
+  <button class="mob-btn" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="hero-bg"></div><div class="hero-grid"></div><div class="particles" id="particles"></div>
+  <div class="hero-content">
+    <div class="hero-text fu">
+      <div class="badge"><div class="pulse"></div>Built for Tufts University</div>
+      <h1>Your Tufts life,<br><span class="grad">all in one app.</span></h1>
+      <p class="hero-desc">Events, dining menus, live shuttle tracking, friends, QR tickets, free food alerts, campus maps, and more — JumboNow is the everything app for the Tufts community.</p>
+      <div class="hero-actions">
+        <a href="#download" class="btn-p">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Download Free
+        </a>
+        <button class="btn-s" onclick="openWebApp()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+          Try Web Version
+        </button>
+      </div>
+      <div class="hero-stats">
+        <div><div class="hs-v">30+</div><div class="hs-l">Features</div></div>
+        <div><div class="hs-v">7</div><div class="hs-l">Shuttle Routes</div></div>
+        <div><div class="hs-v">11</div><div class="hs-l">Dining Spots</div></div>
+        <div><div class="hs-v">$0</div><div class="hs-l">Free Forever</div></div>
+      </div>
+    </div>
+    <div class="hero-phones fu">
+      <div class="phone-glow"></div>
+      <div class="carousel-wrap">
+      <div class="carousel-phone" id="carouselPhone">
+        <div class="carousel-notch"></div>
+        <div class="carousel-track" id="carouselTrack">
+
+          <!-- 1: Events -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F3AD; Events</div><div class="cs-sub">What's happening at Tufts</div></div>
+            <div class="cs-body">
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(59,130,246,.15)">&#x1F3AF;</div><div class="cs-item-info"><div class="cs-item-name">Student Org Fair</div><div class="cs-item-detail">Feb 11 &bull; Academic Quad</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Free</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(236,72,153,.15)">&#x2764;&#xFE0F;</div><div class="cs-item-info"><div class="cs-item-name">AAFRO: AAFROdisiac</div><div class="cs-item-detail">Feb 14 &bull; Dewick</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Free</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(168,85,247,.15)">&#x1F3B6;</div><div class="cs-item-info"><div class="cs-item-name">Beelzebubs Concert</div><div class="cs-item-detail">Feb 18 &bull; Goddard Chapel</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Free</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(52,211,153,.15)">&#x26F0;&#xFE0F;</div><div class="cs-item-info"><div class="cs-item-name">Blue Hills Hike</div><div class="cs-item-detail">Feb 13 &bull; Mountain Club</div></div><div class="cs-item-badge" style="background:rgba(251,191,36,.15);color:#FBBF24">$10</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(245,158,11,.15)">&#x1F3C0;</div><div class="cs-item-info"><div class="cs-item-name">Intramural Basketball</div><div class="cs-item-detail">Feb 20 &bull; Cousens Gym</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Free</div></div>
+            </div>
+          </div>
+
+          <!-- 2: Dining -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F37D;&#xFE0F; Dining</div><div class="cs-sub">Today's menus &amp; hours</div></div>
+            <div class="cs-pills"><div class="cs-pill active">Lunch</div><div class="cs-pill">Dinner</div><div class="cs-pill">Late Night</div></div>
+            <div class="cs-body">
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(52,211,153,.12)">&#x1F372;</div><div class="cs-item-info"><div class="cs-item-name">Dewick Dining</div><div class="cs-item-detail">Grilled Chicken &bull; Mac &amp; Cheese &bull; Soup</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Open</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(59,130,246,.12)">&#x1F957;</div><div class="cs-item-info"><div class="cs-item-name">Carmichael</div><div class="cs-item-detail">Stir Fry &bull; Rice Bowl &bull; Pasta Bar</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Open</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(245,158,11,.12)">&#x2615;</div><div class="cs-item-info"><div class="cs-item-name">Hotung Cafe</div><div class="cs-item-detail">Coffee &bull; Pastries &bull; Sandwiches</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Open</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(168,85,247,.12)">&#x1F956;</div><div class="cs-item-info"><div class="cs-item-name">Hodgdon</div><div class="cs-item-detail">Grab &amp; Go &bull; Wraps &bull; Salads</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Open</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(239,68,68,.12)">&#x1F96F;</div><div class="cs-item-info"><div class="cs-item-name">Pax et Lox</div><div class="cs-item-detail">Kosher Deli</div></div><div class="cs-item-badge" style="background:rgba(239,68,68,.15);color:#EF4444">Closed</div></div>
+            </div>
+          </div>
+
+          <!-- 3: Free Food -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F355; Free Food</div><div class="cs-sub">Active alerts near you</div></div>
+            <div class="cs-body">
+              <div class="cs-ff"><div class="cs-ff-row"><span style="font-size:16px">&#x1F355;</span><div class="cs-ff-name">Leftover Pizza</div><div class="cs-ff-badge">Active</div></div><div class="cs-ff-loc">&#x1F4CD; Tisch Library Lobby</div><div class="cs-ff-time">&#x23F1; Expires in 45 min</div></div>
+              <div class="cs-ff"><div class="cs-ff-row"><span style="font-size:16px">&#x1F9C1;</span><div class="cs-ff-name">Cupcakes from Event</div><div class="cs-ff-badge">Active</div></div><div class="cs-ff-loc">&#x1F4CD; Campus Center, 2nd Floor</div><div class="cs-ff-time">&#x23F1; Expires in 1hr 20min</div></div>
+              <div class="cs-ff"><div class="cs-ff-row"><span style="font-size:16px">&#x1F354;</span><div class="cs-ff-name">Burgers at BBQ</div><div class="cs-ff-badge">Active</div></div><div class="cs-ff-loc">&#x1F4CD; Academic Quad</div><div class="cs-ff-time">&#x23F1; Expires in 30 min</div></div>
+              <div class="cs-ff" style="opacity:.5;border-color:rgba(239,68,68,.15)"><div class="cs-ff-row"><span style="font-size:16px">&#x1F96A;</span><div class="cs-ff-name">Bagels &amp; Cream Cheese</div><div style="padding:2px 6px;border-radius:5px;background:rgba(239,68,68,.15);color:#EF4444;font-size:8px;font-weight:700">Expired</div></div><div class="cs-ff-loc">&#x1F4CD; Halligan Hall</div></div>
+            </div>
+          </div>
+
+          <!-- 4: Shuttles -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F68C; Shuttles</div><div class="cs-sub">Live tracking &bull; 7 routes</div></div>
+            <div class="cs-body">
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(52,211,153,.15)">&#x1F7E2;</div><div class="cs-item-info"><div class="cs-item-name">Joey</div><div class="cs-item-detail">Medford loop &bull; Every 15 min &bull; 2 buses</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Live</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(59,130,246,.15)">&#x1F535;</div><div class="cs-item-info"><div class="cs-item-name">Davis Direct</div><div class="cs-item-detail">Campus &#x2192; Davis Sq &bull; Every 20 min</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Live</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(168,85,247,.15)">&#x1F7E3;</div><div class="cs-item-info"><div class="cs-item-name">Polly</div><div class="cs-item-detail">South campus &bull; Every 12 min &bull; 1 bus</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Live</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(245,158,11,.15)">&#x1F7E1;</div><div class="cs-item-info"><div class="cs-item-name">SMFA</div><div class="cs-item-detail">Campus &#x2192; SMFA &bull; Every 25 min</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">Live</div></div>
+              <div class="cs-item" style="opacity:.5"><div class="cs-item-ico" style="background:rgba(239,68,68,.12)">&#x1F534;</div><div class="cs-item-info"><div class="cs-item-name">Beacon Direct</div><div class="cs-item-detail">Campus &#x2192; Boston campus</div></div><div class="cs-item-badge" style="background:rgba(106,173,228,.08);color:#5A7A9B">Off</div></div>
+            </div>
+          </div>
+
+          <!-- 5: Friends -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F465; Friends</div><div class="cs-sub">Your campus network</div></div>
+            <div class="cs-body">
+              <div class="cs-friend"><div class="cs-friend-av" style="background:#3B82F6">AS</div><div style="flex:1"><div class="cs-friend-name">Alex Smith</div><div class="cs-friend-sub">Class of 2027 &bull; 3 mutual</div></div><div class="cs-friend-btn">Message</div></div>
+              <div class="cs-friend"><div class="cs-friend-av" style="background:#EC4899">JD</div><div style="flex:1"><div class="cs-friend-name">Jamie Davis</div><div class="cs-friend-sub">Class of 2028 &bull; 5 mutual</div></div><div class="cs-friend-btn">Message</div></div>
+              <div class="cs-friend"><div class="cs-friend-av" style="background:#34D399">MP</div><div style="flex:1"><div class="cs-friend-name">Maya Patel</div><div class="cs-friend-sub">Class of 2026 &bull; 8 mutual</div></div><div class="cs-friend-btn">Message</div></div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#5A7A9B;margin:6px 0 4px">Suggested</div>
+              <div class="cs-friend"><div class="cs-friend-av" style="background:#A855F7">KL</div><div style="flex:1"><div class="cs-friend-name">Kevin Lee</div><div class="cs-friend-sub">Class of 2027 &bull; 2 mutual</div></div><div class="cs-friend-btn" style="background:rgba(106,173,228,.15);color:#6AADE4">Add</div></div>
+              <div class="cs-friend"><div class="cs-friend-av" style="background:#F97316">SR</div><div style="flex:1"><div class="cs-friend-name">Sofia Rivera</div><div class="cs-friend-sub">Class of 2028 &bull; 4 mutual</div></div><div class="cs-friend-btn" style="background:rgba(106,173,228,.15);color:#6AADE4">Add</div></div>
+            </div>
+          </div>
+
+          <!-- 6: QR Tickets -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F3AB; My Tickets</div><div class="cs-sub">Scan to check in at events</div></div>
+            <div class="cs-body">
+              <div class="cs-ticket">
+                <div style="font-size:14px;font-weight:800;margin-bottom:2px">Blue Hills Hike</div>
+                <div style="font-size:10px;color:#8BA3C0;margin-bottom:12px">Tufts Mountain Club &bull; Feb 13</div>
+                <div class="cs-qr"><div style="position:relative;z-index:1">QR CODE</div></div>
+                <div style="font-size:10px;color:#5A7A9B;margin-top:8px;letter-spacing:2px;font-weight:700">JN-AX8K2M</div>
+                <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+                  <div style="padding:5px 12px;border-radius:8px;background:rgba(106,173,228,.1);color:#6AADE4;font-size:10px;font-weight:700">Copy Code</div>
+                  <div style="padding:5px 12px;border-radius:8px;background:rgba(106,173,228,.1);color:#6AADE4;font-size:10px;font-weight:700">Share</div>
+                </div>
+              </div>
+              <div class="cs-item" style="margin-top:6px"><div class="cs-item-ico" style="background:rgba(168,85,247,.15)">&#x1F3B6;</div><div class="cs-item-info"><div class="cs-item-name">Beelzebubs Concert</div><div class="cs-item-detail">Feb 18 &bull; Goddard Chapel &bull; JN-P3QR7F</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">&#x2713;</div></div>
+              <div class="cs-item"><div class="cs-item-ico" style="background:rgba(59,130,246,.15)">&#x1F3AF;</div><div class="cs-item-info"><div class="cs-item-name">Student Org Fair</div><div class="cs-item-detail">Feb 11 &bull; Academic Quad &bull; JN-W5TN9Y</div></div><div class="cs-item-badge" style="background:rgba(52,211,153,.15);color:#34D399">&#x2713;</div></div>
+            </div>
+          </div>
+
+          <!-- 7: Notifications -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F514; Notifications</div><div class="cs-sub">Stay in the loop</div></div>
+            <div class="cs-body">
+              <div class="cs-notif unread"><div class="cs-notif-ico" style="background:rgba(52,211,153,.12)">&#x1F389;</div><div class="cs-notif-text"><strong>Alex Smith</strong> RSVP'd to your event</div><div class="cs-notif-time">2m</div></div>
+              <div class="cs-notif unread"><div class="cs-notif-ico" style="background:rgba(249,115,22,.12)">&#x1F355;</div><div class="cs-notif-text"><strong>Free food:</strong> Pizza at Tisch Library</div><div class="cs-notif-time">15m</div></div>
+              <div class="cs-notif unread"><div class="cs-notif-ico" style="background:rgba(236,72,153,.12)">&#x1F465;</div><div class="cs-notif-text"><strong>Jamie Davis</strong> sent a friend request</div><div class="cs-notif-time">1h</div></div>
+              <div class="cs-notif"><div class="cs-notif-ico" style="background:rgba(59,130,246,.12)">&#x1F4AC;</div><div class="cs-notif-text"><strong>Maya Patel</strong> sent you a message</div><div class="cs-notif-time">3h</div></div>
+              <div class="cs-notif"><div class="cs-notif-ico" style="background:rgba(168,85,247,.12)">&#x1F3AB;</div><div class="cs-notif-text">Ticket for <strong>Blue Hills Hike</strong> confirmed</div><div class="cs-notif-time">5h</div></div>
+              <div class="cs-notif"><div class="cs-notif-ico" style="background:rgba(245,158,11,.12)">&#x2B50;</div><div class="cs-notif-text">Earned <strong>"Social Butterfly"</strong> badge!</div><div class="cs-notif-time">1d</div></div>
+            </div>
+          </div>
+
+          <!-- 8: Profile -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F393; Profile</div><div class="cs-sub">Your campus identity</div></div>
+            <div class="cs-body">
+              <div class="cs-profile">
+                <div class="cs-avatar">TE</div>
+                <div style="font-size:14px;font-weight:800">teny.makuach</div>
+                <div style="font-size:10px;color:#8BA3C0;margin-top:2px">Class of 2028 &bull; Computer Science</div>
+                <div class="cs-pstats">
+                  <div><div class="cs-pstat-v" style="color:#6AADE4">5</div><div class="cs-pstat-l">Events</div></div>
+                  <div><div class="cs-pstat-v" style="color:#6AADE4">3</div><div class="cs-pstat-l">Tickets</div></div>
+                  <div><div class="cs-pstat-v" style="color:#FBBF24">42</div><div class="cs-pstat-l">Vibe</div></div>
+                </div>
+              </div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#5A7A9B;margin:4px 0">Campus Resources</div>
+              <div class="cs-res">
+                <div class="cs-rb"><span>&#x1F4DA;</span><span>Canvas</span></div>
+                <div class="cs-rb"><span>&#x1F3EB;</span><span>SIS</span></div>
+                <div class="cs-rb"><span>&#x1F3E5;</span><span>Health</span></div>
+                <div class="cs-rb"><span>&#x1F68C;</span><span>Shuttle</span></div>
+                <div class="cs-rb"><span>&#x1F37D;&#xFE0F;</span><span>Dining</span></div>
+                <div class="cs-rb"><span>&#x1F3CB;&#xFE0F;</span><span>Fitness</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 9: Map -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F5FA;&#xFE0F; Campus Map</div><div class="cs-sub">19+ buildings &bull; Directions</div></div>
+            <div class="cs-pills"><div class="cs-pill active">All</div><div class="cs-pill">Academic</div><div class="cs-pill">Dining</div><div class="cs-pill">Athletic</div></div>
+            <div class="cs-body">
+              <div class="cs-map-item"><div class="cs-map-ico" style="background:rgba(59,130,246,.12)">&#x1F3DB;&#xFE0F;</div><div style="flex:1"><div class="cs-item-name">Tisch Library</div><div class="cs-item-detail">Library &bull; Open until 1 AM</div></div></div>
+              <div class="cs-map-item"><div class="cs-map-ico" style="background:rgba(52,211,153,.12)">&#x1F3EB;</div><div style="flex:1"><div class="cs-item-name">Halligan Hall</div><div class="cs-item-detail">Academic &bull; Computer Science</div></div></div>
+              <div class="cs-map-item"><div class="cs-map-ico" style="background:rgba(245,158,11,.12)">&#x1F3CB;&#xFE0F;</div><div style="flex:1"><div class="cs-item-name">Tisch Sports Center</div><div class="cs-item-detail">Athletics &bull; Gym &amp; Pool</div></div></div>
+              <div class="cs-map-item"><div class="cs-map-ico" style="background:rgba(168,85,247,.12)">&#x26EA;</div><div style="flex:1"><div class="cs-item-name">Goddard Chapel</div><div class="cs-item-detail">Landmark &bull; Events venue</div></div></div>
+              <div class="cs-map-item"><div class="cs-map-ico" style="background:rgba(20,184,166,.12)">&#x1F372;</div><div style="flex:1"><div class="cs-item-name">Dewick Dining</div><div class="cs-item-detail">Dining &bull; Open for Lunch</div></div></div>
+            </div>
+          </div>
+
+          <!-- 10: Discover -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F50D; Discover</div><div class="cs-sub">Search &amp; explore events</div></div>
+            <div class="cs-body">
+              <div style="padding:10px 12px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:10px;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="font-size:14px;color:#5A7A9B">&#x1F50E;</span><span style="font-size:12px;color:#5A7A9B">Search events, clubs, people...</span></div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#5A7A9B;margin:6px 0 6px">Trending</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+                <div style="padding:5px 10px;border-radius:8px;background:rgba(106,173,228,.08);font-size:10px;font-weight:600;color:#8BA3C0">#TuftsSpringFling</div>
+                <div style="padding:5px 10px;border-radius:8px;background:rgba(236,72,153,.08);font-size:10px;font-weight:600;color:#EC4899">#FreeFood</div>
+                <div style="padding:5px 10px;border-radius:8px;background:rgba(168,85,247,.08);font-size:10px;font-weight:600;color:#A855F7">#ACappella</div>
+                <div style="padding:5px 10px;border-radius:8px;background:rgba(52,211,153,.08);font-size:10px;font-weight:600;color:#34D399">#ClubSports</div>
+              </div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#5A7A9B;margin:4px 0 6px">Categories</div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:5px">
+                <div style="padding:10px;background:rgba(59,130,246,.08);border-radius:10px;text-align:center"><span style="font-size:18px">&#x1F3AD;</span><div style="font-size:10px;font-weight:700;color:#FFF;margin-top:4px">Social</div></div>
+                <div style="padding:10px;background:rgba(52,211,153,.08);border-radius:10px;text-align:center"><span style="font-size:18px">&#x1F3C8;</span><div style="font-size:10px;font-weight:700;color:#FFF;margin-top:4px">Sports</div></div>
+                <div style="padding:10px;background:rgba(168,85,247,.08);border-radius:10px;text-align:center"><span style="font-size:18px">&#x1F4DA;</span><div style="font-size:10px;font-weight:700;color:#FFF;margin-top:4px">Academic</div></div>
+                <div style="padding:10px;background:rgba(245,158,11,.08);border-radius:10px;text-align:center"><span style="font-size:18px">&#x1F3B5;</span><div style="font-size:10px;font-weight:700;color:#FFF;margin-top:4px">Music</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 11: Achievements -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x1F3C6; Achievements</div><div class="cs-sub">Your campus involvement</div></div>
+            <div class="cs-body">
+              <div style="text-align:center;padding:12px;background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(245,158,11,.06));border:1px solid rgba(251,191,36,.15);border-radius:14px;margin-bottom:8px"><div style="font-size:32px;margin-bottom:4px">&#x2B50;</div><div style="font-size:24px;font-weight:900;color:#FBBF24">42</div><div style="font-size:10px;color:#8BA3C0;font-weight:600">Vibe Score</div></div>
+              <div class="cs-achieve"><div class="cs-achieve-ico" style="background:rgba(52,211,153,.12)">&#x1F3C3;</div><div style="flex:1"><div style="font-size:12px;font-weight:700;color:#FFF">First Timer</div><div style="font-size:9px;color:#5A7A9B">Attend your first event</div></div><div style="font-size:10px;color:#34D399;font-weight:700">&#x2713;</div></div>
+              <div class="cs-achieve"><div class="cs-achieve-ico" style="background:rgba(236,72,153,.12)">&#x1F98B;</div><div style="flex:1"><div style="font-size:12px;font-weight:700;color:#FFF">Social Butterfly</div><div style="font-size:9px;color:#5A7A9B">Add 10 friends</div></div><div style="font-size:10px;color:#34D399;font-weight:700">&#x2713;</div></div>
+              <div class="cs-achieve"><div class="cs-achieve-ico" style="background:rgba(59,130,246,.12)">&#x1F39F;&#xFE0F;</div><div style="flex:1"><div style="font-size:12px;font-weight:700;color:#FFF">Event Hopper</div><div style="font-size:9px;color:#5A7A9B">Attend 5 events</div></div><div style="font-size:10px;color:#FBBF24;font-weight:700">3/5</div></div>
+              <div class="cs-achieve" style="opacity:.5"><div class="cs-achieve-ico" style="background:rgba(168,85,247,.12)">&#x1F451;</div><div style="flex:1"><div style="font-size:12px;font-weight:700;color:#FFF">Campus Legend</div><div style="font-size:9px;color:#5A7A9B">Reach 100 Vibe Score</div></div><div style="font-size:10px;color:#5A7A9B;font-weight:700">&#x1F512;</div></div>
+            </div>
+          </div>
+
+          <!-- 12: Create Event -->
+          <div class="carousel-slide" style="background:#081430">
+            <div class="cs-header"><div class="cs-title">&#x2795; Create Event</div><div class="cs-sub">Host your own campus event</div></div>
+            <div class="cs-body">
+              <div style="padding:10px 12px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:10px;margin-bottom:6px"><div style="font-size:9px;color:#5A7A9B;font-weight:600;margin-bottom:3px">Event Name</div><div style="font-size:12px;color:#FFF;font-weight:600">Study Group Meetup</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+                <div style="padding:10px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:10px"><div style="font-size:9px;color:#5A7A9B;font-weight:600;margin-bottom:3px">&#x1F4C5; Date</div><div style="font-size:11px;color:#FFF;font-weight:600">Feb 15</div></div>
+                <div style="padding:10px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:10px"><div style="font-size:9px;color:#5A7A9B;font-weight:600;margin-bottom:3px">&#x1F553; Time</div><div style="font-size:11px;color:#FFF;font-weight:600">7:00 PM</div></div>
+              </div>
+              <div style="padding:10px 12px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:10px;margin-bottom:6px"><div style="font-size:9px;color:#5A7A9B;font-weight:600;margin-bottom:3px">&#x1F4CD; Location</div><div style="font-size:12px;color:#FFF;font-weight:600">Tisch Library, Room 304</div></div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#5A7A9B;margin:6px 0 5px">Choose Gradient</div>
+              <div style="display:flex;gap:6px;margin-bottom:8px"><div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);border:2px solid #6AADE4"></div><div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#EC4899,#BE185D)"></div><div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#34D399,#059669)"></div><div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#A855F7,#7C3AED)"></div><div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#F97316,#EA580C)"></div><div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#FBBF24,#D97706)"></div></div>
+              <div style="padding:12px;background:#418FDE;border-radius:10px;text-align:center;font-size:13px;font-weight:800;color:#FFF">Create Event</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <!-- Carousel Controls -->
+      <div class="carousel-arrows">
+        <div class="carousel-arrow" onclick="carouselPrev()">&#x2039;</div>
+        <div class="carousel-arrow" onclick="carouselNext()">&#x203A;</div>
+      </div>
+      <div class="carousel-dots" id="carouselDots"></div>
+      <div class="carousel-label" id="carouselLabel">Events</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="sec sec-alt" id="features">
+  <div class="sec-hdr fu">
+    <div class="sec-label">&#x26A1; Features</div>
+    <h2 class="sec-title">Everything Jumbos need,<br>nothing they don't.</h2>
+    <p class="sec-sub">From dining menus to live shuttle maps, JumboNow replaces a dozen apps with one beautiful experience.</p>
+  </div>
+  <div class="fg">
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(59,130,246,.12)">&#x1F3AD;</div><h3>Events & RSVP</h3><p>Browse events by 8 categories, RSVP instantly, get QR-code tickets, invite friends, and rate events after attending.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(52,211,153,.12)">&#x1F37D;&#xFE0F;</div><h3>Dining Menus</h3><p>Real-time menus for all 11 dining locations with nutrition, allergens, diet icons, and open/closed status.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(251,191,36,.12)">&#x1F68C;</div><h3>Live Shuttle Tracking</h3><p>Track 7 Tufts shuttle routes in real-time with live bus GPS positions, ETAs, and full schedules.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(249,115,22,.12)">&#x1F355;</div><h3>Free Food Alerts</h3><p>Get notified instantly when free food appears on campus. Filter by 8 food types. Post alerts with expiration timers.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(236,72,153,.12)">&#x1F465;</div><h3>Friends & Messaging</h3><p>Add friends, create groups, send real-time messages. See mutual friends, suggested connections, and friend activity.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(168,85,247,.12)">&#x1F5FA;&#xFE0F;</div><h3>Campus Map</h3><p>Interactive map with 19+ buildings, search, 6 category filters, and walking/driving/transit directions.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(20,184,166,.12)">&#x1F3AB;</div><h3>QR Code Tickets</h3><p>Digital tickets with scannable QR codes, 8-character confirmation codes, copy/share, and door check-in.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(245,158,11,.12)">&#x1F3C6;</div><h3>Achievements & Vibe</h3><p>Earn badges for attending events. Build your Vibe Score. Showcase campus involvement on your profile.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(99,102,241,.12)">&#x1F50D;</div><h3>Discover & Search</h3><p>Full-text event search, trending topics, advanced filters by category, price, and date. Debounced results.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(239,68,68,.12)">&#x1F514;</div><h3>Real-Time Notifications</h3><p>Instant alerts for event joins, invitations, messages, free food, and more. Filter by type, mark all read.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(14,165,233,.12)">&#x2795;</div><h3>Create Events</h3><p>Full event editor with date pickers, 8 gradient presets, 24+ icons, logo upload, poster upload, and ticket config.</p></div>
+    <div class="fc fu"><div class="fc-icon" style="background:rgba(34,197,94,.12)">&#x1F517;</div><h3>Campus Resources</h3><p>Quick links to Canvas, SIS, Health Portal, Tufts Reserve, Laundry View, Athletics, and 15+ essential tools.</p></div>
+  </div>
+</section>
+
+<!-- DINING SHOWCASE -->
+<section class="sec" id="dining-sec" style="background:var(--bg1)">
+  <div class="show-grid fu">
+    <div class="show-phone"><div class="pf" style="aspect-ratio:9/19.5;background:#081430;display:flex;flex-direction:column;padding:24px;overflow:hidden;border-radius:40px;box-shadow:0 30px 60px rgba(0,0,0,.3),0 0 0 1px rgba(106,173,228,.1)">
+      <div style="font-size:20px;font-weight:900;color:#FFF;margin-bottom:4px">Dining</div>
+      <div style="font-size:12px;color:#8BA3C0;margin-bottom:16px">Today's menus & hours</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px"><div style="flex:1;padding:8px;background:rgba(52,211,153,.15);border-radius:10px;text-align:center;font-size:11px;font-weight:700;color:#34D399">Lunch</div><div style="flex:1;padding:8px;background:rgba(106,173,228,.06);border-radius:10px;text-align:center;font-size:11px;font-weight:700;color:#5A7A9B">Dinner</div></div>
+      <div style="padding:12px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:12px;margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:20px">&#x1F372;</span><div><div style="font-size:13px;font-weight:700;color:#FFF">Dewick Dining</div><div style="font-size:10px;color:#5A7A9B">Dining Hall</div></div><div style="margin-left:auto;padding:3px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:#34D399;font-size:10px;font-weight:700">Open</div></div><div style="font-size:10px;color:#8BA3C0">Grilled Chicken &bull; Mac & Cheese &bull; Caesar Salad &bull; Tomato Soup</div></div>
+      <div style="padding:12px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:12px;margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:20px">&#x1F957;</span><div><div style="font-size:13px;font-weight:700;color:#FFF">Carmichael</div><div style="font-size:10px;color:#5A7A9B">Dining Hall</div></div><div style="margin-left:auto;padding:3px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:#34D399;font-size:10px;font-weight:700">Open</div></div><div style="font-size:10px;color:#8BA3C0">Stir Fry &bull; Rice Bowl &bull; Garden Salad &bull; Pasta Bar</div></div>
+      <div style="padding:12px;background:rgba(106,173,228,.06);border:1px solid rgba(106,173,228,.1);border-radius:12px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">&#x2615;</span><div><div style="font-size:13px;font-weight:700;color:#FFF">Hotung Cafe</div><div style="font-size:10px;color:#5A7A9B">Cafe</div></div><div style="margin-left:auto;padding:3px 8px;border-radius:6px;background:rgba(239,68,68,.15);color:#EF4444;font-size:10px;font-weight:700">Closed</div></div></div>
+    </div></div>
+    <div class="show-text">
+      <h2>See what's in<br>the dining hall.</h2>
+      <p>Real menus for every meal at all 11 dining spots. Nutrition info, allergen icons, diet filters, and live open/closed status powered by the Nutrislice API.</p>
+      <div class="sf-list">
+        <div class="sf"><div class="sf-i" style="background:rgba(52,211,153,.12)">&#x1F372;</div><div class="sf-t"><strong>Full menus</strong> with stations, items, and descriptions</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(251,191,36,.12)">&#x1F4CA;</div><div class="sf-t"><strong>Nutrition info</strong> — calories, protein, carbs, fat, fiber</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(168,85,247,.12)">&#x1F33F;</div><div class="sf-t"><strong>Diet icons</strong> — Vegetarian, Vegan, Gluten-Free, Halal, Kosher</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(59,130,246,.12)">&#x1F6D2;</div><div class="sf-t"><strong>Mobile ordering</strong> link to Transact for 4 locations</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FREE FOOD SHOWCASE -->
+<section class="sec" style="background:linear-gradient(180deg,var(--bg1),var(--bg2))">
+  <div class="show-grid rev fu">
+    <div class="show-phone"><div class="pf" style="aspect-ratio:9/19.5;background:#081430;display:flex;flex-direction:column;padding:24px;overflow:hidden;border-radius:40px;box-shadow:0 30px 60px rgba(0,0,0,.3),0 0 0 1px rgba(106,173,228,.1)">
+      <div style="font-size:20px;font-weight:900;color:#FFF;margin-bottom:4px">&#x1F355; Free Food</div>
+      <div style="font-size:12px;color:#8BA3C0;margin-bottom:14px">Active alerts near you</div>
+      <div style="padding:12px;background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(239,68,68,.08));border:1px solid rgba(249,115,22,.2);border-radius:14px;margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:18px">&#x1F355;</span><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#FFF">Leftover Pizza</div><div style="font-size:10px;color:#8BA3C0">Tisch Library Lobby</div></div><div style="padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:#34D399;font-size:9px;font-weight:700">Active</div></div><div style="font-size:10px;color:#F97316;font-weight:600">&#x23F1; Expires in 45min</div></div>
+      <div style="padding:12px;background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(239,68,68,.08));border:1px solid rgba(249,115,22,.2);border-radius:14px;margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:18px">&#x1F9C1;</span><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#FFF">Cupcakes from Event</div><div style="font-size:10px;color:#8BA3C0">Campus Center, 2nd Floor</div></div><div style="padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:#34D399;font-size:9px;font-weight:700">Active</div></div><div style="font-size:10px;color:#F97316;font-weight:600">&#x23F1; Expires in 1hr 20min</div></div>
+      <div style="padding:12px;background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(239,68,68,.08));border:1px solid rgba(249,115,22,.15);border-radius:14px;opacity:.5"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">&#x1F96A;</span><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#FFF">Bagels & Cream Cheese</div><div style="font-size:10px;color:#8BA3C0">Halligan Hall</div></div><div style="padding:2px 8px;border-radius:6px;background:rgba(239,68,68,.15);color:#EF4444;font-size:9px;font-weight:700">Expired</div></div></div>
+    </div></div>
+    <div class="show-text">
+      <h2>Never miss<br>free food again.</h2>
+      <p>Students post free food alerts with location, food type, and expiration timers. Get real-time notifications so you're first in line.</p>
+      <div class="sf-list">
+        <div class="sf"><div class="sf-i" style="background:rgba(249,115,22,.12)">&#x1F514;</div><div class="sf-t"><strong>Instant notifications</strong> when food is posted nearby</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(52,211,153,.12)">&#x23F1;</div><div class="sf-t"><strong>Auto-expiring</strong> alerts (30min, 1hr, 2hr, 3hr timers)</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(251,191,36,.12)">&#x1F50D;</div><div class="sf-t"><strong>8 food types</strong> — Pizza, Sandwiches, Baked Goods, and more</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SHUTTLE SHOWCASE -->
+<section class="sec" id="shuttle-sec" style="background:var(--bg2)">
+  <div class="show-grid fu">
+    <div class="show-phone"><div class="pf"><img src="assets/screenshots/shuttle-tracking.png" alt="Shuttle Tracking" onerror="this.parentElement.innerHTML='<div style=\'width:100%;aspect-ratio:9/19.5;background:#081430;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px\'><div style=\'font-size:64px;margin-bottom:16px\'>&#x1F68C;</div><div style=\'color:#6AADE4;font-weight:900;font-size:22px\'>Live Shuttles</div><div style=\'color:#8BA3C0;font-size:13px;margin-top:8px\'>7 routes tracked in real-time</div></div>'"></div></div>
+    <div class="show-text">
+      <h2>Never miss<br>the shuttle again.</h2>
+      <p>Real-time GPS tracking of every Tufts shuttle bus. See exactly where your bus is, when it's arriving, and which routes are active — powered by Passio GO.</p>
+      <div class="sf-list">
+        <div class="sf"><div class="sf-i" style="background:rgba(52,211,153,.12)">&#x1F4CD;</div><div class="sf-t"><strong>Live GPS positions</strong> updated every 10 seconds</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(59,130,246,.12)">&#x1F6E4;&#xFE0F;</div><div class="sf-t"><strong>7 routes</strong> — Joey, Polly, Davis Direct, SMFA, and more</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(251,191,36,.12)">&#x1F552;</div><div class="sf-t"><strong>Full schedules</strong> with first/last bus and frequency</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOCIAL SHOWCASE -->
+<section class="sec" id="social-sec" style="background:linear-gradient(180deg,var(--bg2),var(--bg1))">
+  <div class="show-grid rev fu">
+    <div class="show-phone"><div class="pf"><img src="assets/screenshots/profile.png" alt="Profile" onerror="this.parentElement.innerHTML='<div style=\'width:100%;aspect-ratio:9/19.5;background:#081430;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px\'><div style=\'font-size:64px;margin-bottom:16px\'>&#x1F393;</div><div style=\'color:#6AADE4;font-weight:900;font-size:22px\'>Your Profile</div><div style=\'color:#8BA3C0;font-size:13px;margin-top:8px\'>Stats, achievements & more</div></div>'"></div></div>
+    <div class="show-text">
+      <h2>Connect with<br>your community.</h2>
+      <p>Build your campus network. Add friends, create groups, message classmates, and build your Vibe Score by attending events.</p>
+      <div class="sf-list">
+        <div class="sf"><div class="sf-i" style="background:rgba(236,72,153,.12)">&#x1F465;</div><div class="sf-t"><strong>Friends & groups</strong> with suggested connections</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(168,85,247,.12)">&#x1F4AC;</div><div class="sf-t"><strong>Real-time messaging</strong> with read receipts</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(245,158,11,.12)">&#x2B50;</div><div class="sf-t"><strong>Vibe Score & achievements</strong> for campus involvement</div></div>
+        <div class="sf"><div class="sf-i" style="background:rgba(20,184,166,.12)">&#x1F3AB;</div><div class="sf-t"><strong>QR tickets</strong> with confirmation codes & ratings</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section class="dl" id="download">
+  <div class="dl-glow"></div>
+  <div class="dl-content fu">
+    <h2>Ready to be a<br><span style="color:var(--accent)">connected Jumbo?</span></h2>
+    <p>Download JumboNow for free and join the Tufts community. Available on iOS and Android.</p>
+    <div class="store-row">
+      <a href="#" class="store-btn">
+        <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store">
+      </a>
+      <a href="#" class="store-btn">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg" alt="Get it on Google Play">
+      </a>
+    </div>
+    <div class="dl-div"><span>or try it now</span></div>
+    <button class="btn-p" onclick="openWebApp()" style="margin:0 auto">
+      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+      Launch Web App
+    </button>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="ft">
+    <div class="ft-brand"><img src="assets/jumbo-logo.png" alt="JumboNow"><span>JumboNow</span></div>
+    <p class="ft-text">&copy; 2026 JumboNow. Built with &#x1F49C; for Tufts University.</p>
+    <div class="ft-links"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Contact</a></div>
+  </div>
+</footer>
+
+<!-- WEB APP -->
+<div class="wa-overlay" id="waOverlay">
+  <div class="wa">
+    <button class="wa-x" onclick="closeWA()">&times;</button>
+    <div class="wa-hdr"><img src="assets/jumbo-logo.png" alt="JumboNow"><h2>JumboNow</h2><p>Tufts University</p></div>
+    <div class="wa-body" id="waBody">
+      <!-- Quick Actions -->
+      <div class="wa-qa" id="waQA">
+        <div class="wa-qb active" onclick="showS('events')"><span>&#x1F3AD;</span><span>Events</span></div>
+        <div class="wa-qb" onclick="showS('dining')"><span>&#x1F37D;&#xFE0F;</span><span>Dining</span></div>
+        <div class="wa-qb" onclick="showS('food')"><span>&#x1F355;</span><span>Free Food</span></div>
+        <div class="wa-qb" onclick="showS('shuttle')"><span>&#x1F68C;</span><span>Shuttle</span></div>
+      </div>
+
+      <!-- EVENTS -->
+      <div id="ws-events">
+        <div class="wa-sec">Upcoming Events</div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(59,130,246,.15)">&#x1F3AF;</div><div class="wa-info"><h4>Student Org Fair</h4><span>Student Activities Office</span></div></div><div class="wa-meta"><span>&#x1F4C5; Feb 11</span><span>&#x1F553; 3:39 PM</span><span>&#x1F4CD; Academic Quad</span><span style="color:#34D399;font-weight:700">Free</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(52,211,153,.15)">&#x26F0;&#xFE0F;</div><div class="wa-info"><h4>Blue Hills Hike</h4><span>Tufts Mountain Club</span></div></div><div class="wa-meta"><span>&#x1F4C5; Feb 13</span><span>&#x1F553; 3:39 PM</span><span>&#x1F4CD; Blue Hills</span><span style="color:#FBBF24;font-weight:700">$10</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(236,72,153,.15)">&#x2764;&#xFE0F;</div><div class="wa-info"><h4>AAFRO: AAFROdisiac</h4><span>AAFRO</span></div></div><div class="wa-meta"><span>&#x1F4C5; Feb 14</span><span>&#x1F553; 7:00 PM</span><span>&#x1F4CD; Dewick</span><span style="color:#34D399;font-weight:700">Free</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(168,85,247,.15)">&#x1F3B6;</div><div class="wa-info"><h4>Beelzebubs Concert</h4><span>Beelzebubs</span></div></div><div class="wa-meta"><span>&#x1F4C5; Feb 18</span><span>&#x1F553; 8 PM</span><span>&#x1F4CD; Goddard Chapel</span><span style="color:#34D399;font-weight:700">Free</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(245,158,11,.15)">&#x1F3C0;</div><div class="wa-info"><h4>Intramural Basketball</h4><span>Tufts Recreation</span></div></div><div class="wa-meta"><span>&#x1F4C5; Feb 20</span><span>&#x1F553; 6 PM</span><span>&#x1F4CD; Cousens Gym</span><span style="color:#34D399;font-weight:700">Free</span></div></div>
+      </div>
+
+      <!-- DINING -->
+      <div id="ws-dining" style="display:none">
+        <div class="wa-sec">Dining Locations</div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x1F372;</span><div><div class="wa-dn">Dewick Dining</div><div class="wa-dt">Dining Hall &bull; Lunch: 11:30-1:30</div></div></div><div class="wa-st o">Open</div></div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x1F957;</span><div><div class="wa-dn">Carmichael</div><div class="wa-dt">Dining Hall &bull; Lunch: 11:30-1:30</div></div></div><div class="wa-st o">Open</div></div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x2615;</span><div><div class="wa-dn">Hotung Cafe</div><div class="wa-dt">Cafe &bull; 7:30 AM - 10 PM</div></div></div><div class="wa-st o">Open</div></div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x1F956;</span><div><div class="wa-dn">Hodgdon</div><div class="wa-dt">Grab &amp; Go &bull; 7 AM - 9 PM</div></div></div><div class="wa-st o">Open</div></div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x1F382;</span><div><div class="wa-dn">Commons</div><div class="wa-dt">Marketplace &bull; 7 AM - 11 PM</div></div></div><div class="wa-st o">Open</div></div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x1F96F;</span><div><div class="wa-dn">Pax et Lox</div><div class="wa-dt">Kosher Deli</div></div></div><div class="wa-st c">Closed</div></div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x1F319;</span><div><div class="wa-dn">Late Night</div><div class="wa-dt">Late Night &bull; 9 PM - 12 AM</div></div></div><div class="wa-st c">Closed</div></div>
+        <div class="wa-di"><div class="wa-dl"><span>&#x1F3E2;</span><div><div class="wa-dn">Tower Cafe</div><div class="wa-dt">Cafe &bull; 8 AM - 4 PM</div></div></div><div class="wa-st c">Closed</div></div>
+      </div>
+
+      <!-- FREE FOOD -->
+      <div id="ws-food" style="display:none">
+        <div class="wa-sec">Active Free Food Alerts</div>
+        <div class="wa-ff"><div class="wa-ff-top"><span style="font-size:18px">&#x1F355;</span><div style="flex:1"><div style="font-size:13px;font-weight:700">Leftover Pizza</div><div class="wa-ff-loc">&#x1F4CD; Tisch Library Lobby</div></div><div class="wa-ff-badge">Active</div></div><div class="wa-ff-time">&#x23F1; Expires in 45 min</div></div>
+        <div class="wa-ff"><div class="wa-ff-top"><span style="font-size:18px">&#x1F9C1;</span><div style="flex:1"><div style="font-size:13px;font-weight:700">Cupcakes from Event</div><div class="wa-ff-loc">&#x1F4CD; Campus Center, 2nd Floor</div></div><div class="wa-ff-badge">Active</div></div><div class="wa-ff-time">&#x23F1; Expires in 1hr 20min</div></div>
+        <div class="wa-ff"><div class="wa-ff-top"><span style="font-size:18px">&#x1F96A;</span><div style="flex:1"><div style="font-size:13px;font-weight:700">Bagels & Cream Cheese</div><div class="wa-ff-loc">&#x1F4CD; Halligan Hall</div></div><div style="padding:2px 8px;border-radius:6px;background:rgba(239,68,68,.15);color:#EF4444;font-size:9px;font-weight:700">Expired</div></div><div style="font-size:10px;color:var(--dim)">Posted 2 hours ago</div></div>
+        <div class="wa-ff"><div class="wa-ff-top"><span style="font-size:18px">&#x1F354;</span><div style="flex:1"><div style="font-size:13px;font-weight:700">Burgers at BBQ</div><div class="wa-ff-loc">&#x1F4CD; Academic Quad</div></div><div class="wa-ff-badge">Active</div></div><div class="wa-ff-time">&#x23F1; Expires in 30 min</div></div>
+      </div>
+
+      <!-- SHUTTLE -->
+      <div id="ws-shuttle" style="display:none">
+        <div class="wa-sec">Shuttle Routes &bull; Live</div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(52,211,153,.15)">&#x1F7E2;</div><div class="wa-info"><h4>Joey</h4><span style="color:#34D399">Active &mdash; 2 buses</span></div></div><div class="wa-meta"><span>Medford/Somerville loop &bull; Every 15 min</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(59,130,246,.15)">&#x1F535;</div><div class="wa-info"><h4>Davis Direct</h4><span style="color:#34D399">Active &mdash; 1 bus</span></div></div><div class="wa-meta"><span>Campus &#x2192; Davis Square &bull; Every 20 min</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(168,85,247,.15)">&#x1F7E3;</div><div class="wa-info"><h4>Polly</h4><span style="color:#34D399">Active &mdash; 1 bus</span></div></div><div class="wa-meta"><span>South campus connector &bull; Every 12 min</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(245,158,11,.15)">&#x1F7E1;</div><div class="wa-info"><h4>SMFA</h4><span style="color:#34D399">Active &mdash; 2 buses</span></div></div><div class="wa-meta"><span>Campus &#x2192; SMFA &bull; Every 25 min</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(239,68,68,.15)">&#x1F534;</div><div class="wa-info"><h4>Beacon Direct</h4><span style="color:var(--dim)">Inactive</span></div></div><div class="wa-meta"><span>Campus &#x2192; Boston campus</span></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(20,184,166,.15)">&#x1F7E2;</div><div class="wa-info"><h4>SMFA After Hours</h4><span style="color:var(--dim)">Inactive &mdash; starts 10 PM</span></div></div><div class="wa-meta"><span>Late night SMFA service</span></div></div>
+      </div>
+
+      <!-- FRIENDS -->
+      <div id="ws-friends" style="display:none">
+        <div class="wa-sec">Your Friends</div>
+        <div class="wa-friend"><div class="wa-friend-av" style="background:#3B82F6">AS</div><div class="wa-friend-info"><div class="wa-friend-name">Alex Smith</div><div class="wa-friend-sub">Class of 2027 &bull; 3 mutual friends</div></div><button class="wa-friend-btn">Message</button></div>
+        <div class="wa-friend"><div class="wa-friend-av" style="background:#EC4899">JD</div><div class="wa-friend-info"><div class="wa-friend-name">Jamie Davis</div><div class="wa-friend-sub">Class of 2028 &bull; 5 mutual friends</div></div><button class="wa-friend-btn">Message</button></div>
+        <div class="wa-friend"><div class="wa-friend-av" style="background:#34D399">MP</div><div class="wa-friend-info"><div class="wa-friend-name">Maya Patel</div><div class="wa-friend-sub">Class of 2026 &bull; 8 mutual friends</div></div><button class="wa-friend-btn">Message</button></div>
+        <div class="wa-sec">Suggested</div>
+        <div class="wa-friend"><div class="wa-friend-av" style="background:#A855F7">KL</div><div class="wa-friend-info"><div class="wa-friend-name">Kevin Lee</div><div class="wa-friend-sub">Class of 2027 &bull; 2 mutual friends</div></div><button class="wa-friend-btn" style="background:rgba(106,173,228,.15);color:var(--accent)">Add</button></div>
+        <div class="wa-friend"><div class="wa-friend-av" style="background:#F97316">SR</div><div class="wa-friend-info"><div class="wa-friend-name">Sofia Rivera</div><div class="wa-friend-sub">Class of 2028 &bull; 4 mutual friends</div></div><button class="wa-friend-btn" style="background:rgba(106,173,228,.15);color:var(--accent)">Add</button></div>
+      </div>
+
+      <!-- NOTIFICATIONS -->
+      <div id="ws-notifs" style="display:none">
+        <div class="wa-sec">Notifications</div>
+        <div class="wa-notif unread"><div class="wa-notif-ico" style="background:rgba(52,211,153,.12)">&#x1F389;</div><div class="wa-notif-text"><strong>Alex Smith</strong> RSVP'd to your event "Study Session"</div><div class="wa-notif-time">2m ago</div></div>
+        <div class="wa-notif unread"><div class="wa-notif-ico" style="background:rgba(249,115,22,.12)">&#x1F355;</div><div class="wa-notif-text"><strong>Free food alert:</strong> Pizza at Tisch Library Lobby</div><div class="wa-notif-time">15m ago</div></div>
+        <div class="wa-notif unread"><div class="wa-notif-ico" style="background:rgba(236,72,153,.12)">&#x1F465;</div><div class="wa-notif-text"><strong>Jamie Davis</strong> sent you a friend request</div><div class="wa-notif-time">1h ago</div></div>
+        <div class="wa-notif"><div class="wa-notif-ico" style="background:rgba(59,130,246,.12)">&#x1F4AC;</div><div class="wa-notif-text"><strong>Maya Patel</strong> sent you a message</div><div class="wa-notif-time">3h ago</div></div>
+        <div class="wa-notif"><div class="wa-notif-ico" style="background:rgba(168,85,247,.12)">&#x1F3AB;</div><div class="wa-notif-text">Your ticket for <strong>Blue Hills Hike</strong> is confirmed</div><div class="wa-notif-time">5h ago</div></div>
+        <div class="wa-notif"><div class="wa-notif-ico" style="background:rgba(245,158,11,.12)">&#x2B50;</div><div class="wa-notif-text">You earned the <strong>"Social Butterfly"</strong> achievement!</div><div class="wa-notif-time">1d ago</div></div>
+      </div>
+
+      <!-- PROFILE -->
+      <div id="ws-profile" style="display:none">
+        <div class="wa-profile">
+          <div class="wa-avatar">TE</div>
+          <div class="wa-pname">teny.makuach</div>
+          <div class="wa-puser">Class of 2028 &bull; Computer Science</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">I'm a passionate computer science student</div>
+          <div class="wa-pstats">
+            <div class="wa-pstat"><div class="wa-pstat-v" style="color:var(--accent)">1</div><div class="wa-pstat-l">Events</div></div>
+            <div class="wa-pstat"><div class="wa-pstat-v" style="color:var(--accent)">1</div><div class="wa-pstat-l">Tickets</div></div>
+            <div class="wa-pstat"><div class="wa-pstat-v" style="color:var(--yellow)">18</div><div class="wa-pstat-l">Vibe</div></div>
+          </div>
+        </div>
+        <div class="wa-sec">Campus Resources</div>
+        <div class="wa-res">
+          <a class="wa-rb" href="#"><span>&#x1F4DA;</span><span>Canvas</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F3EB;</span><span>SIS</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F3E5;</span><span>Health</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F68C;</span><span>Shuttle</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F37D;&#xFE0F;</span><span>Dining</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F3CB;&#xFE0F;</span><span>Fitness</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F4BB;</span><span>IT Help</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F3C8;</span><span>Athletics</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F4C5;</span><span>Reserve</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F6A8;</span><span>Safety</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F9FA;</span><span>Laundry</span></a>
+          <a class="wa-rb" href="#"><span>&#x1F697;</span><span>Parking</span></a>
+        </div>
+      </div>
+
+      <!-- MAP -->
+      <div id="ws-map" style="display:none">
+        <div class="wa-sec">Campus Locations</div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(59,130,246,.12)">&#x1F3DB;&#xFE0F;</div><div class="wa-info"><h4>Tisch Library</h4><span>Library &bull; Open until 1 AM</span></div></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(52,211,153,.12)">&#x1F3EB;</div><div class="wa-info"><h4>Halligan Hall</h4><span>Academic &bull; Computer Science</span></div></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(245,158,11,.12)">&#x1F3CB;&#xFE0F;</div><div class="wa-info"><h4>Tisch Sports Center</h4><span>Athletics &bull; Gym & Pool</span></div></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(168,85,247,.12)">&#x26EA;</div><div class="wa-info"><h4>Goddard Chapel</h4><span>Landmark &bull; Events venue</span></div></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(236,72,153,.12)">&#x1F3E5;</div><div class="wa-info"><h4>Health Services</h4><span>Health &bull; 124 Professors Row</span></div></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(20,184,166,.12)">&#x1F372;</div><div class="wa-info"><h4>Dewick Dining</h4><span>Dining &bull; Open for Lunch</span></div></div></div>
+        <div class="wa-card"><div class="wa-top"><div class="wa-ico" style="background:rgba(99,102,241,.12)">&#x1F3E0;</div><div class="wa-info"><h4>Campus Center</h4><span>Student Life &bull; Open 7 AM - 12 AM</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <div class="wa-nav">
+      <button class="wa-nb active" onclick="showS('events')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Events</button>
+      <button class="wa-nb" onclick="showS('friends')"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Friends</button>
+      <button class="wa-nb" onclick="showS('notifs')"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>Alerts</button>
+      <button class="wa-nb" onclick="showS('map')"><svg viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>Map</button>
+      <button class="wa-nb" onclick="showS('profile')"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---- Scroll & particles ---- */
+const sections = ['events','dining','food','shuttle','friends','notifs','map','profile'];
+const obs = new IntersectionObserver(e => e.forEach(el => { if(el.isIntersecting) el.target.classList.add('visible') }), {threshold:.1,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.fu').forEach(el => obs.observe(el));
+window.addEventListener('scroll', () => document.getElementById('navbar').classList.toggle('scrolled', scrollY > 30));
+const pc = document.getElementById('particles');
+for(let i=0;i<20;i++){const p=document.createElement('div');p.className='particle';p.style.left=Math.random()*100+'%';p.style.animationDelay=Math.random()*8+'s';p.style.animationDuration=(6+Math.random()*6)+'s';pc.appendChild(p)}
+
+/* ---- Hero Phone Carousel ---- */
+const cTrack=document.getElementById('carouselTrack');
+const cDots=document.getElementById('carouselDots');
+const cLabel=document.getElementById('carouselLabel');
+const slideLabels=['Events','Dining','Free Food','Shuttles','Friends','QR Tickets','Notifications','Profile','Campus Map','Discover','Achievements','Create Event'];
+const slideCount=slideLabels.length;
+let cIdx=0,cAuto,cTouchX=0,cTouchDX=0,cDragging=false;
+
+// Build dots
+slideLabels.forEach((_,i)=>{const d=document.createElement('div');d.className='carousel-dot'+(i===0?' active':'');d.onclick=()=>goSlide(i);cDots.appendChild(d)});
+
+function goSlide(i){
+  cIdx=((i%slideCount)+slideCount)%slideCount;
+  cTrack.style.transform='translateX(-'+cIdx*100+'%)';
+  cDots.querySelectorAll('.carousel-dot').forEach((d,j)=>d.classList.toggle('active',j===cIdx));
+  cLabel.textContent=slideLabels[cIdx];
+  resetAuto();
+}
+function carouselNext(){goSlide(cIdx+1)}
+function carouselPrev(){goSlide(cIdx-1)}
+function resetAuto(){clearInterval(cAuto);cAuto=setInterval(carouselNext,5000)}
+resetAuto();
+
+// Touch/swipe support
+const cPhone=document.getElementById('carouselPhone');
+cPhone.addEventListener('touchstart',e=>{cTouchX=e.touches[0].clientX;cDragging=true;cTrack.style.transition='none';clearInterval(cAuto)},{passive:true});
+cPhone.addEventListener('touchmove',e=>{if(!cDragging)return;cTouchDX=e.touches[0].clientX-cTouchX;const pct=-cIdx*100+(cTouchDX/cPhone.offsetWidth)*100;cTrack.style.transform='translateX('+pct+'%)'},{passive:true});
+cPhone.addEventListener('touchend',()=>{if(!cDragging)return;cDragging=false;cTrack.style.transition='transform .45s cubic-bezier(.25,.46,.45,.94)';const thresh=cPhone.offsetWidth*0.15;if(cTouchDX<-thresh)carouselNext();else if(cTouchDX>thresh)carouselPrev();else goSlide(cIdx);cTouchDX=0});
+// Mouse drag support
+cPhone.addEventListener('mousedown',e=>{cTouchX=e.clientX;cDragging=true;cTrack.style.transition='none';clearInterval(cAuto);e.preventDefault()});
+window.addEventListener('mousemove',e=>{if(!cDragging)return;cTouchDX=e.clientX-cTouchX;const pct=-cIdx*100+(cTouchDX/cPhone.offsetWidth)*100;cTrack.style.transform='translateX('+pct+'%)'});
+window.addEventListener('mouseup',()=>{if(!cDragging)return;cDragging=false;cTrack.style.transition='transform .45s cubic-bezier(.25,.46,.45,.94)';const thresh=cPhone.offsetWidth*0.15;if(cTouchDX<-thresh)carouselNext();else if(cTouchDX>thresh)carouselPrev();else goSlide(cIdx);cTouchDX=0});
+// Keyboard arrows
+document.addEventListener('keydown',e=>{if(document.getElementById('waOverlay').classList.contains('active')){if(e.key==='Escape')closeWA();return}if(e.key==='ArrowRight')carouselNext();if(e.key==='ArrowLeft')carouselPrev()});
+
+/* ---- Web App ---- */
+function openWebApp(){const o=document.getElementById('waOverlay');o.style.display='flex';requestAnimationFrame(()=>o.classList.add('active'));document.body.style.overflow='hidden';showS('events')}
+function closeWA(){const o=document.getElementById('waOverlay');o.classList.remove('active');setTimeout(()=>o.style.display='none',300);document.body.style.overflow=''}
+document.getElementById('waOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeWA()});
+function showS(s){
+  sections.forEach(x=>{const el=document.getElementById('ws-'+x);if(el)el.style.display=x===s?'block':'none'});
+  document.querySelectorAll('#waQA .wa-qb').forEach(b=>b.classList.remove('active'));
+  const qaMap={events:0,dining:1,food:2,shuttle:3};
+  if(qaMap[s]!==undefined)document.querySelectorAll('#waQA .wa-qb')[qaMap[s]].classList.add('active');
+  const navMap={events:0,friends:1,notifs:2,map:3,profile:4};
+  document.querySelectorAll('.wa-nb').forEach((b,i)=>b.classList.toggle('active',navMap[s]===i));
+  if(['dining','food','shuttle'].includes(s))document.querySelectorAll('.wa-nb').forEach(b=>b.classList.remove('active'));
+}
+function toggleMobileMenu(){const l=document.querySelector('.nav-links');l.style.display=l.style.display==='flex'?'none':'flex';if(l.style.display==='flex')l.style.cssText='display:flex;position:fixed;top:72px;left:0;right:0;flex-direction:column;background:rgba(11,26,59,.98);padding:20px;gap:16px;border-bottom:1px solid rgba(106,173,228,.1);backdrop-filter:blur(20px);z-index:999;'}
+</script>
+</body>
+</html>

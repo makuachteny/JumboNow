@@ -25,6 +25,7 @@ import {
   X,
   Check,
   ImagePlus,
+  Upload,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { eventsService } from '../services/events.service';
@@ -85,6 +86,8 @@ export default function CreateEventScreen({ navigation, route }) {
   const [activePicker, setActivePicker] = useState(null);
   const [maxCapacity, setMaxCapacity] = useState(editEvent?.max_capacity?.toString() || '100');
   const [selectedIcon, setSelectedIcon] = useState(editEvent?.icon || '\uD83C\uDF89');
+  const [customLogoUri, setCustomLogoUri] = useState(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [selectedGradient, setSelectedGradient] = useState(editEvent ? findGradientIndex(editEvent.color) : 0);
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState(editEvent?.tags || []);
@@ -168,11 +171,55 @@ export default function CreateEventScreen({ navigation, route }) {
     }
   };
 
-  const uploadPoster = async (localUri) => {
+  const pickLogo = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please allow photo library access to upload a logo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setCustomLogoUri(result.assets[0].uri);
+      // Clear emoji selection since we're using a custom logo now
+      setSelectedIcon(null);
+    }
+  };
+
+  const ALLOWED_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  const MAX_LOGO_SIZE = 5 * 1024 * 1024; // 5MB
+  const MAX_POSTER_SIZE = 10 * 1024 * 1024; // 10MB
+
+  const uploadLogo = async (localUri) => {
     const ext = localUri.split('.').pop()?.toLowerCase() || 'jpg';
-    const fileName = `event-posters/${Date.now()}.${ext}`;
+    if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Only jpg, png, gif, and webp images are allowed.');
     const response = await fetch(localUri);
     const blob = await response.blob();
+    if (blob.size > MAX_LOGO_SIZE) throw new Error('Logo must be under 5MB.');
+    const fileName = `org-logos/${Date.now()}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('event-images')
+      .upload(fileName, blob, { contentType: `image/${ext}`, upsert: false });
+    if (error) throw error;
+
+    const { data: urlData } = supabase.storage
+      .from('event-images')
+      .getPublicUrl(fileName);
+    return urlData.publicUrl;
+  };
+
+  const uploadPoster = async (localUri) => {
+    const ext = localUri.split('.').pop()?.toLowerCase() || 'jpg';
+    if (!ALLOWED_IMAGE_EXTS.includes(ext)) throw new Error('Only jpg, png, gif, and webp images are allowed.');
+    const response = await fetch(localUri);
+    const blob = await response.blob();
+    if (blob.size > MAX_POSTER_SIZE) throw new Error('Poster image must be under 10MB.');
+    const fileName = `event-posters/${Date.now()}.${ext}`;
 
     const { error } = await supabase.storage
       .from('event-images')
@@ -218,6 +265,20 @@ export default function CreateEventScreen({ navigation, route }) {
     const gradient = GRADIENT_PRESETS[selectedGradient];
     const capacity = parseInt(maxCapacity) || 100;
 
+    // Upload custom logo if selected
+    let iconValue = selectedIcon || '\uD83C\uDF89';
+    if (customLogoUri) {
+      try {
+        setUploadingLogo(true);
+        iconValue = await uploadLogo(customLogoUri);
+      } catch (logoErr) {
+        Alert.alert('Logo Upload Failed', 'Could not upload logo. Using default icon instead.');
+        iconValue = selectedIcon || '\uD83C\uDF89';
+      } finally {
+        setUploadingLogo(false);
+      }
+    }
+
     // Upload poster image if selected
     let imageUrl = null;
     if (posterImage) {
@@ -232,7 +293,7 @@ export default function CreateEventScreen({ navigation, route }) {
       title: title.trim(),
       subtitle: subtitle.trim() || organizerName.trim() || null,
       description: description.trim() || null,
-      icon: selectedIcon,
+      icon: iconValue,
       color: gradient.primary,
       gradient_colors: gradient.colors,
       category: eventType === 'academic' ? 'Study' : eventType === 'arts_culture' ? 'Arts' : eventType === 'sports' ? 'Sports' : 'General',
@@ -246,7 +307,7 @@ export default function CreateEventScreen({ navigation, route }) {
       vibe: '🎪 Fun',
       event_type: eventType,
       organizer_name: organizerName.trim() || null,
-      organizer_icon: selectedIcon,
+      organizer_icon: iconValue,
       ticket_price: 0,
       requires_reservation: true,
       is_featured: isFeatured,
@@ -309,7 +370,11 @@ export default function CreateEventScreen({ navigation, route }) {
                 <View style={styles.previewOverlay} />
               </>
             ) : null}
-            <Text style={styles.previewIcon}>{selectedIcon}</Text>
+            {customLogoUri ? (
+              <Image source={{ uri: customLogoUri }} style={styles.previewLogo} />
+            ) : (
+              <Text style={styles.previewIcon}>{selectedIcon}</Text>
+            )}
             <Text style={styles.previewTitle}>{title || 'Your Event'}</Text>
             <Text style={styles.previewSub}>{subtitle || organizerName || 'Organizer'}</Text>
           </View>
@@ -396,17 +461,48 @@ export default function CreateEventScreen({ navigation, route }) {
 
           {/* Section: Icon & Color */}
           <Text style={styles.sectionLabel}>Event Icon</Text>
-          <View style={styles.iconGrid}>
-            {EVENT_ICONS.map((icon) => (
-              <TouchableOpacity
-                key={icon}
-                style={[styles.iconOption, selectedIcon === icon && styles.iconOptionSelected]}
-                onPress={() => setSelectedIcon(icon)}
-              >
-                <Text style={styles.iconText}>{icon}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+
+          {/* Custom Logo Upload */}
+          <TouchableOpacity style={styles.logoUploadRow} onPress={pickLogo} activeOpacity={0.7}>
+            {customLogoUri ? (
+              <View style={styles.logoPreviewRow}>
+                <Image source={{ uri: customLogoUri }} style={styles.logoPreviewThumb} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.logoUploadLabel}>Custom Logo</Text>
+                  <Text style={styles.logoUploadHint}>Tap to change</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.logoRemoveBtn}
+                  onPress={() => { setCustomLogoUri(null); setSelectedIcon('\uD83C\uDF89'); }}
+                >
+                  <X size={14} color={colors.error} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.logoUploadPlaceholder}>
+                <Upload size={18} color={colors.accent} />
+                <Text style={styles.logoUploadLabel}>Upload Organization Logo</Text>
+                <Text style={styles.logoUploadHint}>Use your club or org's real logo instead of an emoji</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {!customLogoUri && (
+            <>
+              <Text style={styles.orDividerText}>or choose an emoji</Text>
+              <View style={styles.iconGrid}>
+                {EVENT_ICONS.map((icon) => (
+                  <TouchableOpacity
+                    key={icon}
+                    style={[styles.iconOption, selectedIcon === icon && styles.iconOptionSelected]}
+                    onPress={() => setSelectedIcon(icon)}
+                  >
+                    <Text style={styles.iconText}>{icon}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
 
           <Text style={styles.sectionLabel}>Event Color</Text>
           <View style={styles.colorRow}>
@@ -656,6 +752,15 @@ const createStyles = (colors) => StyleSheet.create({
   typeIcon: { fontSize: 16 },
   typeText: { color: colors.textTertiary, fontSize: 12, fontWeight: '700' },
   typeTextActive: { color: colors.accent },
+  previewLogo: { width: 64, height: 64, borderRadius: 18, marginBottom: 8, zIndex: 1 },
+  logoUploadRow: { marginBottom: 12 },
+  logoPreviewRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
+  logoPreviewThumb: { width: 44, height: 44, borderRadius: 12 },
+  logoRemoveBtn: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.error + '15' },
+  logoUploadPlaceholder: { alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accentBorder, backgroundColor: colors.card, gap: 4 },
+  logoUploadLabel: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  logoUploadHint: { color: colors.textMuted, fontSize: 11 },
+  orDividerText: { color: colors.textMuted, fontSize: 12, fontWeight: '600', textAlign: 'center', marginVertical: 10 },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   iconOption: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 2, borderColor: colors.cardBorder },
   iconOptionSelected: { borderColor: colors.accent, backgroundColor: colors.accentBg },

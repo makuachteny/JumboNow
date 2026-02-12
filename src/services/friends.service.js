@@ -64,7 +64,10 @@ export const friendsService = {
       .insert({ requester_id: user.id, addressee_id: addresseeId })
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') throw new Error('Friend request already sent!');
+      throw error;
+    }
     return data;
   },
 
@@ -131,10 +134,41 @@ export const friendsService = {
       .from('profiles')
       .select('*')
       .not('id', 'in', `(${safeIds.join(',')})`)
-      .limit(10);
+      .order('display_name', { ascending: true })
+      .limit(100);
 
     if (error) throw error;
     return data;
+  },
+
+  async discoverUsers() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Get IDs of existing friends and pending requests
+    const { data: existing } = await supabase
+      .from('friendships')
+      .select('requester_id, addressee_id')
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+
+    const excludeIds = new Set([user.id]);
+    (existing || []).forEach((f) => {
+      excludeIds.add(f.requester_id);
+      excludeIds.add(f.addressee_id);
+    });
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const safeIds = [...excludeIds].filter((id) => uuidRegex.test(id));
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, username, display_name, avatar_url, avatar_color, is_verified, graduation_year, bio')
+      .not('id', 'in', `(${safeIds.join(',')})`)
+      .order('display_name', { ascending: true })
+      .limit(500);
+
+    if (error) throw error;
+    return data || [];
   },
 
   async searchUsers(query) {

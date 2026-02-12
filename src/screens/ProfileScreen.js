@@ -8,12 +8,12 @@ import {
   Modal,
   TextInput,
   StatusBar,
-  Platform,
   Animated,
   Alert,
   Switch,
   ActivityIndicator,
   Image,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -24,7 +24,6 @@ import {
   Calendar,
   Star,
   Zap,
-  Heart,
   Clock,
   LogOut,
   ChevronRight,
@@ -33,13 +32,23 @@ import {
   Moon,
   HelpCircle,
   MessageCircle,
-  Share2,
-  Award,
   Ticket,
-  Eye,
   BookOpen,
   Mail,
   FileText,
+  Monitor,
+  Trophy,
+  ShieldAlert,
+  GraduationCap,
+  Utensils,
+  Dumbbell,
+  HeartPulse,
+  WashingMachine,
+  Car,
+  Cpu,
+  Bus,
+  Pizza,
+  ExternalLink,
 } from 'lucide-react-native';
 import { authService } from '../services/auth.service';
 import { storageService } from '../services/storage.service';
@@ -48,6 +57,8 @@ import { achievementsService } from '../services/achievements.service';
 import { eventsService } from '../services/events.service';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
+import SmartIcon from '../components/SmartIcon';
+import { getEventIcon } from '../config/clubLogos';
 import { useTheme } from '../context/ThemeContext';
 
 const defaultProfile = {
@@ -299,9 +310,27 @@ export default function ProfileScreen({ navigation }) {
   const ticketCount = pastEvents.length;
   const liveVibeScore = Math.min(100, 10 + (savedEventCount * 3) + (ticketCount * 5) + (friendCount * 2) + (avgRating * 4));
 
+  const CAMPUS_RESOURCES = [
+    { id: 'dining', label: 'Dining', Icon: Utensils, color: '#EF4444', navigate: 'Dining' },
+    { id: 'canvas', label: 'Canvas', Icon: GraduationCap, color: '#E53E3E', url: 'https://canvas.tufts.edu' },
+    { id: 'shuttle', label: 'Tufts Shuttle', Icon: Bus, color: '#3B82F6', navigate: 'Map' },
+    { id: 'health', label: 'Health & Wellness', Icon: HeartPulse, color: '#EC4899', url: 'https://students.tufts.edu/health-and-wellness' },
+    { id: 'safety', label: 'Be Safe', Icon: ShieldAlert, color: '#F59E0B', url: 'https://publicsafety.tufts.edu' },
+    { id: 'fitness', label: 'Fitness Center', Icon: Dumbbell, color: '#8B5CF6', url: 'https://ase.tufts.edu/campusrec' },
+    { id: 'athletics', label: 'Athletics', Icon: Trophy, color: '#3579C6', url: 'https://gotuftsjumbos.com' },
+    { id: 'apps', label: 'Apps & Software', Icon: Monitor, color: '#6366F1', url: 'https://it.tufts.edu/software' },
+    { id: 'laundry', label: 'Laundry', Icon: WashingMachine, color: '#14B8A6', url: 'https://www.laundryview.com/tufts' },
+    { id: 'parking', label: 'Parking', Icon: Car, color: '#64748B', url: 'https://publicsafety.tufts.edu/parking-services' },
+    { id: 'technology', label: 'Technology', Icon: Cpu, color: '#0EA5E9', url: 'https://it.tufts.edu' },
+    { id: 'freefood', label: 'Free Food', Icon: Pizza, color: '#22C55E', navigate: 'FreeFood' },
+    { id: 'map', label: 'Campus Map', Icon: MapPin, color: '#D946EF', navigate: 'Map' },
+    { id: 'studyspaces', label: 'Study Spaces', Icon: BookOpen, color: '#F97316', url: 'https://tischlibrary.tufts.edu' },
+    { id: 'reserve', label: 'Reserve Tufts', Icon: Calendar, color: '#059669', url: 'https://reserve.tufts.edu/EmsWebApp/' },
+  ];
+
   const sections = [
     { id: 'activity', label: 'Activity' },
-    { id: 'achievements', label: 'Badges' },
+    { id: 'campus', label: 'Campus' },
     { id: 'about', label: 'About' },
   ];
 
@@ -311,7 +340,7 @@ export default function ProfileScreen({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')} accessibilityLabel="Go back" accessibilityRole="button">
           <ArrowLeft size={22} color={colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
@@ -438,7 +467,7 @@ export default function ProfileScreen({ navigation }) {
                   accessibilityLabel={`View event: ${event.title}`}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.eventItemIcon}>{event.icon}</Text>
+                  <SmartIcon value={getEventIcon(event)} size={28} borderRadius={10} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.eventItemTitle}>{event.title}</Text>
                     <Text style={styles.eventItemMeta}>{event.date} {'\u2022'} {event.category} {'\u2022'} {event.status}</Text>
@@ -471,7 +500,7 @@ export default function ProfileScreen({ navigation }) {
                       accessibilityLabel={`View event: ${event.title}`}
                       accessibilityRole="button"
                     >
-                      <Text style={styles.eventItemIcon}>{event.icon || '\uD83C\uDF89'}</Text>
+                      <SmartIcon value={getEventIcon(event)} size={28} borderRadius={10} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.eventItemTitle}>{event.title}</Text>
                         <Text style={styles.eventItemMeta}>{dateStr} {'\u2022'} {timeStr} {'\u2022'} {isFree ? 'Free' : `$${event.ticket_price}`}</Text>
@@ -484,35 +513,38 @@ export default function ProfileScreen({ navigation }) {
             </View>
           )}
 
-          {/* Achievements Section */}
-          {activeSection === 'achievements' && (
+          {/* Campus Resources Section */}
+          {activeSection === 'campus' && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Achievements</Text>
-              {achievements.length === 0 && (
-                <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 12 }}>No achievements yet. Keep attending events!</Text>
-              )}
-              <View style={styles.achievementsGrid}>
-                {achievements.map((badge) => (
-                  <View
-                    key={badge.id}
-                    style={[styles.achievementCard, !badge.unlocked && styles.achievementLocked]}
-                  >
-                    <Text style={[styles.achievementIcon, !badge.unlocked && { opacity: 0.3 }]}>
-                      {badge.icon}
-                    </Text>
-                    <Text style={[styles.achievementTitle, !badge.unlocked && { opacity: 0.3 }]}>
-                      {badge.title}
-                    </Text>
-                    <Text style={[styles.achievementDesc, !badge.unlocked && { opacity: 0.3 }]}>
-                      {badge.description}
-                    </Text>
-                    {!badge.unlocked && (
-                      <View style={styles.lockOverlay}>
-                        <Text style={styles.lockIcon}>{'\uD83D\uDD12'}</Text>
+              <Text style={styles.sectionTitle}>Campus Resources</Text>
+              <View style={styles.campusGrid}>
+                {CAMPUS_RESOURCES.map((res) => {
+                  const ResIcon = res.Icon;
+                  return (
+                    <TouchableOpacity
+                      key={res.id}
+                      style={styles.campusTile}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        if (res.navigate) {
+                          navigation.navigate(res.navigate);
+                        } else if (res.url) {
+                          Linking.openURL(res.url);
+                        }
+                      }}
+                    >
+                      <View style={[styles.campusIconWrap, { backgroundColor: res.color + '18' }]}>
+                        <ResIcon size={22} color={res.color} />
                       </View>
-                    )}
-                  </View>
-                ))}
+                      <Text style={styles.campusTileLabel} numberOfLines={2}>{res.label}</Text>
+                      {res.url && (
+                        <View style={styles.campusExternalBadge}>
+                          <ExternalLink size={9} color={colors.textMuted} />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           )}
@@ -1079,8 +1111,8 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: 12,
   },
   backButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: colors.glass,
     alignItems: 'center',
@@ -1098,8 +1130,8 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 8,
   },
   iconBtn: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: colors.glass,
     alignItems: 'center',
@@ -1327,45 +1359,40 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.accentMuted,
     fontSize: 12,
   },
-  achievementsGrid: {
+  campusGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
-  achievementCard: {
-    width: '48%',
+  campusTile: {
+    width: '31%',
     alignItems: 'center',
-    padding: 16,
+    padding: 14,
     borderRadius: 16,
     backgroundColor: colors.glass,
     borderWidth: 1,
     borderColor: colors.glassBorder,
-    gap: 6,
+    gap: 8,
+    position: 'relative',
   },
-  achievementLocked: {
-    backgroundColor: colors.card,
-    borderColor: colors.divider,
+  campusIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  achievementIcon: {
-    fontSize: 32,
-  },
-  achievementTitle: {
+  campusTileLabel: {
     color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  achievementDesc: {
-    color: colors.accentMuted,
     fontSize: 11,
+    fontWeight: '700',
     textAlign: 'center',
+    lineHeight: 14,
   },
-  lockOverlay: {
+  campusExternalBadge: {
     position: 'absolute',
     top: 8,
     right: 8,
-  },
-  lockIcon: {
-    fontSize: 14,
   },
   aboutCard: {
     padding: 16,

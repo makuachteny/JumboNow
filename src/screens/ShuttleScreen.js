@@ -13,9 +13,10 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from '../components/MapViewWrapper';
 import {
   ArrowRight,
+  ArrowUp,
   Bus,
   RefreshCw,
   X,
@@ -126,6 +127,19 @@ function formatDistance(meters) {
   return `${(meters / 1609.34).toFixed(1)} mi`;
 }
 
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth's radius in meters
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function ShuttleScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -149,6 +163,9 @@ export default function ShuttleScreen({ navigation }) {
   // In-app walking navigation
   const [navPath, setNavPath] = useState(null);
   const [navigating, setNavigating] = useState(false);
+
+  // Bus tracking
+  const [trackedBus, setTrackedBus] = useState(null);
 
   const mapRef = useRef(null);
   const busInterval = useRef(null);
@@ -307,6 +324,92 @@ export default function ShuttleScreen({ navigation }) {
     return buses.filter((b) => b.routeId === selectedRoute.myid);
   }, [buses, selectedRoute]);
 
+  // Tracked bus real-time info
+  const trackedBusInfo = useMemo(() => {
+    if (!trackedBus) return null;
+    const currentBus = buses.find((b) => b.busId === trackedBus.busId);
+    if (!currentBus) return { lost: true };
+
+    const routeId = currentBus.routeId;
+    const route = routes.find((r) => r.myid === routeId);
+    const color = currentBus.color || route?.color || colors.accent;
+    const routeName = currentBus.route || route?.name || 'Unknown Route';
+    const busName = currentBus.busName || currentBus.busId;
+
+    // Speed from API in mph, default 12 mph for campus shuttles
+    const speedMph = parseFloat(currentBus.speed) || 12;
+    const speedMs = speedMph * 0.44704; // convert mph to m/s
+    const heading = parseFloat(currentBus.calculatedCourse) || 0;
+
+    const busLat = parseFloat(currentBus.latitude);
+    const busLon = parseFloat(currentBus.longitude);
+
+    // Find all stops on this route
+    const stopsOnRoute = stops.filter((s) => s.routeIds?.includes(routeId));
+    const nextStops = stopsOnRoute
+      .map((s) => {
+        const dist = haversineDistance(busLat, busLon, parseFloat(s.latitude), parseFloat(s.longitude));
+        const etaSeconds = speedMs > 0 ? dist / speedMs : 0;
+        const etaMinutes = Math.max(1, Math.round(etaSeconds / 60));
+        return {
+          name: s.name,
+          eta: etaMinutes,
+          etaLabel: etaMinutes < 60 ? `${etaMinutes} min` : `${Math.floor(etaMinutes / 60)} hr ${etaMinutes % 60} min`,
+          distance: formatDistance(dist),
+          distanceMeters: dist,
+        };
+      })
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)
+      .slice(0, 3);
+
+    return { currentBus, color, routeName, busName, speedMph, heading, nextStops };
+  }, [trackedBus, buses, routes, stops, colors.accent]);
+
+  // Visible route path — trailing effect when tracking
+  const visibleRoutePath = useMemo(() => {
+    if (!busRoutePath || !busRoutePath.coords || busRoutePath.coords.length < 2) return null;
+    if (!trackedBus || !trackedBusInfo || trackedBusInfo.lost) {
+      return busRoutePath; // full path when not tracking
+    }
+    const busLat = parseFloat(trackedBusInfo.currentBus.latitude);
+    const busLon = parseFloat(trackedBusInfo.currentBus.longitude);
+
+    // Find closest point index on the route
+    let minDist = Infinity;
+    let closestIdx = 0;
+    for (let i = 0; i < busRoutePath.coords.length; i++) {
+      const c = busRoutePath.coords[i];
+      const d = haversineDistance(busLat, busLon, c.latitude, c.longitude);
+      if (d < minDist) {
+        minDist = d;
+        closestIdx = i;
+      }
+    }
+
+    const aheadCoords = busRoutePath.coords.slice(closestIdx);
+    if (aheadCoords.length < 2) return busRoutePath; // fallback to full if too short
+    return { ...busRoutePath, coords: aheadCoords };
+  }, [busRoutePath, trackedBus, trackedBusInfo]);
+
+  // Auto-follow tracked bus on map
+  useEffect(() => {
+    if (!trackedBus || !trackedBusInfo || trackedBusInfo.lost || !mapRef.current) return;
+    const { currentBus } = trackedBusInfo;
+    mapRef.current.animateToRegion({
+      latitude: parseFloat(currentBus.latitude),
+      longitude: parseFloat(currentBus.longitude),
+      latitudeDelta: 0.006,
+      longitudeDelta: 0.006,
+    }, 500);
+  }, [trackedBusInfo, trackedBus]);
+
+  // Auto-exit tracking if bus disappears
+  useEffect(() => {
+    if (trackedBusInfo?.lost) {
+      setTrackedBus(null);
+    }
+  }, [trackedBusInfo]);
+
   // Fetch road-following path when a route with active buses is selected
   useEffect(() => {
     if (!selectedRoute) {
@@ -351,8 +454,9 @@ export default function ShuttleScreen({ navigation }) {
     loadPath();
   }, [selectedRoute, buses, routeStops, colors.accent]);
 
-  // Auto-fit map to active buses when they update
+  // Auto-fit map to active buses when they update (skip when tracking)
   useEffect(() => {
+    if (trackedBus) return;
     if (!mapRef.current || loading || !selectedRoute) return;
 
     const coords = [];
@@ -370,12 +474,12 @@ export default function ShuttleScreen({ navigation }) {
         }, 500);
       } else {
         mapRef.current.fitToCoordinates(coords, {
-          edgePadding: { top: 180, right: 60, bottom: 220, left: 60 },
+          edgePadding: { top: 180, right: 60, bottom: 320, left: 60 },
           animated: true,
         });
       }
     }
-  }, [filteredBuses, selectedRoute, loading]);
+  }, [filteredBuses, selectedRoute, loading, trackedBus]);
 
   // In-app walking directions to a stop
   const startNavigation = useCallback(async (stop) => {
@@ -404,7 +508,7 @@ export default function ShuttleScreen({ navigation }) {
 
         if (mapRef.current && result.coords.length > 0) {
           mapRef.current.fitToCoordinates(result.coords, {
-            edgePadding: { top: 180, right: 60, bottom: 260, left: 60 },
+            edgePadding: { top: 180, right: 60, bottom: 320, left: 60 },
             animated: true,
           });
         }
@@ -422,6 +526,7 @@ export default function ShuttleScreen({ navigation }) {
 
   const handleStopPress = useCallback((stop) => {
     if (navigating) cancelNavigation();
+    setTrackedBus(null);
     setSelectedStop(stop);
     mapRef.current?.animateToRegion({
       latitude: stop.latitude,
@@ -431,9 +536,197 @@ export default function ShuttleScreen({ navigation }) {
     }, 300);
   }, [navigating, cancelNavigation]);
 
-  const timeAgo = lastUpdated
-    ? `${Math.max(0, Math.floor((Date.now() - lastUpdated.getTime()) / 1000))}s ago`
-    : '';
+  // --- Panel content renderer ---
+  const renderPanelContent = () => {
+    // Priority 1: Error
+    if (error) {
+      return (
+        <View style={styles.panelError}>
+          <Text style={styles.panelErrorText}>{error}</Text>
+          <TouchableOpacity onPress={() => { setError(null); loadData(); }}>
+            <Text style={styles.panelErrorRetry}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Priority 2: Tracking a bus
+    if (trackedBus && trackedBusInfo && !trackedBusInfo.lost) {
+      return (
+        <View>
+          {/* Tracking header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={[styles.trackingIcon, { backgroundColor: trackedBusInfo.color }]}>
+              <Bus size={20} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.trackingRoute} numberOfLines={1}>{trackedBusInfo.routeName}</Text>
+              <Text style={styles.trackingSub}>Bus {trackedBusInfo.busName}</Text>
+            </View>
+            <View style={styles.trackingMeta}>
+              <View style={styles.trackingLiveRow}>
+                <View style={styles.trackingLiveDot} />
+                <Text style={styles.trackingSpeed}>{Math.round(trackedBusInfo.speedMph)} mph</Text>
+              </View>
+              <View style={{ transform: [{ rotate: `${trackedBusInfo.heading}deg` }] }}>
+                <ArrowUp size={16} color={trackedBusInfo.color} />
+              </View>
+            </View>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setTrackedBus(null)}>
+              <X size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Arrival Timeline */}
+          {trackedBusInfo.nextStops.length > 0 && (
+            <View style={styles.timeline}>
+              <Text style={styles.timelineLabel}>Arriving at</Text>
+              {trackedBusInfo.nextStops.map((stop, idx) => {
+                const isNearest = idx === 0;
+                return (
+                  <View key={stop.name} style={styles.timelineRow}>
+                    <View style={styles.timelineDotCol}>
+                      <View style={[
+                        styles.timelineDot,
+                        { backgroundColor: isNearest ? trackedBusInfo.color : '#D1D5DB' },
+                      ]} />
+                      {idx < trackedBusInfo.nextStops.length - 1 && (
+                        <View style={[styles.timelineLine, { backgroundColor: '#E5E7EB' }]} />
+                      )}
+                    </View>
+                    <Text
+                      style={[styles.timelineStop, isNearest && styles.timelineStopBold]}
+                      numberOfLines={1}
+                    >
+                      {stop.name}
+                    </Text>
+                    <View style={[
+                      styles.etaBadge,
+                      { backgroundColor: isNearest ? trackedBusInfo.color + '18' : '#F3F4F6' },
+                    ]}>
+                      <Text style={[
+                        styles.etaText,
+                        { color: isNearest ? trackedBusInfo.color : '#6B7280' },
+                      ]}>
+                        {stop.etaLabel}
+                      </Text>
+                    </View>
+                    <Text style={styles.distText}>{stop.distance}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    // Priority 3: Walking navigation
+    if (navigating && navPath) {
+      return (
+        <View>
+          <View style={styles.navRow}>
+            <View style={styles.navIcon}>
+              <Footprints size={18} color="#4285F4" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.navTitle} numberOfLines={1}>Walking to {navPath.destination}</Text>
+              <View style={styles.navDetails}>
+                <Text style={styles.navDuration}>{navPath.duration}</Text>
+                <View style={styles.navDotSep} />
+                <Text style={styles.navDist}>{navPath.distance}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.closeBtn} onPress={cancelNavigation}>
+              <X size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.navProgress}>
+            <View style={styles.navProgressFill} />
+          </View>
+        </View>
+      );
+    }
+
+    // Priority 4: Selected stop
+    if (selectedStop) {
+      return (
+        <View>
+          <View style={styles.stopRow}>
+            <View style={[styles.stopIcon, { backgroundColor: (selectedStop.color || colors.accent) + '18' }]}>
+              <CircleDot size={18} color={selectedStop.color || colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.stopName}>{selectedStop.name}</Text>
+              <Text style={styles.stopRoutes}>
+                {selectedStop.routeNames?.join(' \u2022 ') || 'Shuttle stop'}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedStop(null)}>
+              <X size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.directionsBtn}
+            onPress={() => startNavigation(selectedStop)}
+          >
+            <Navigation size={14} color="#FFF" />
+            <Text style={styles.directionsBtnText}>Directions</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Priority 5: Fetching path
+    if (fetchingPath) {
+      return (
+        <View style={styles.panelLoading}>
+          <ActivityIndicator size="small" color={colors.accent} />
+          <Text style={styles.panelLoadingText}>Loading route...</Text>
+        </View>
+      );
+    }
+
+    // Priority 6: Bus list
+    if (filteredBuses.length > 0) {
+      return (
+        <ScrollView style={styles.busList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+          {filteredBuses.map((bus) => (
+            <TouchableOpacity
+              key={bus.busId}
+              style={styles.busRow}
+              onPress={() => {
+                setTrackedBus(bus);
+                const busRoute = routes.find((r) => r.myid === bus.routeId);
+                if (busRoute) setSelectedRoute(busRoute);
+                setSelectedStop(null);
+                cancelNavigation();
+              }}
+            >
+              <View style={[styles.busRowIcon, { backgroundColor: bus.color || colors.accent }]}>
+                <Bus size={14} color="#FFF" />
+              </View>
+              <Text style={styles.busRowRoute} numberOfLines={1}>{bus.route}</Text>
+              <Text style={styles.busRowName}>Bus {bus.busName}</Text>
+              <View style={styles.busRowLive}>
+                <View style={styles.busRowLiveDot} />
+                <Text style={styles.busRowLiveText}>Live</Text>
+              </View>
+              <ArrowRight size={14} color="#D1D5DB" />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      );
+    }
+
+    // Priority 7: No buses
+    return (
+      <View style={styles.panelEmpty}>
+        <Bus size={18} color="#9CA3AF" />
+        <Text style={styles.panelEmptyText}>No shuttles currently in service</Text>
+      </View>
+    );
+  };
 
   return (
     <Animated.View
@@ -460,11 +753,11 @@ export default function ShuttleScreen({ navigation }) {
           showsIndoors
           showsPointsOfInterest
         >
-          {/* Bus route path — only shown when bus is active */}
-          {busRoutePath && busRoutePath.coords.length >= 2 && (
+          {/* Bus route path — trailing effect when tracking */}
+          {visibleRoutePath && visibleRoutePath.coords.length >= 2 && (
             <Polyline
-              coordinates={busRoutePath.coords}
-              strokeColor={busRoutePath.color}
+              coordinates={visibleRoutePath.coords}
+              strokeColor={visibleRoutePath.color}
               strokeWidth={5}
               lineJoin="round"
               lineCap="round"
@@ -515,179 +808,41 @@ export default function ShuttleScreen({ navigation }) {
 
       {/* Top Bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
           <ArrowRight size={20} color="#1A1A2E" />
         </TouchableOpacity>
         <View style={styles.topBarCenter}>
           <View style={styles.topBarTitleRow}>
             <Bus size={16} color={colors.accent} />
-            <Text style={styles.topBarTitle}>Tufts Shuttles</Text>
+            <Text style={styles.topBarTitle}>Shuttles</Text>
           </View>
           {lastUpdated && (
             <View style={styles.liveRow}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveText}>Live {timeAgo}</Text>
+              <Text style={styles.liveText}>Live</Text>
             </View>
           )}
         </View>
         <TouchableOpacity
           style={[styles.refreshBtn, refreshing && styles.refreshBtnActive]}
           onPress={handleRefresh}
+          accessibilityLabel="Refresh shuttle data"
+          accessibilityRole="button"
         >
           <RefreshCw size={18} color={refreshing ? '#FFF' : '#1A1A2E'} />
         </TouchableOpacity>
       </View>
 
-      {/* Route Filter Pills */}
-      <View style={styles.routeBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.routeScroll}
-        >
-          <TouchableOpacity
-            style={[styles.routePill, !selectedRoute && styles.routePillActive]}
-            onPress={() => { setSelectedRoute(null); setSelectedStop(null); setBusRoutePath(null); cancelNavigation(); }}
-          >
-            <Text style={[styles.routePillText, !selectedRoute && styles.routePillTextActive]}>
-              All Routes
-            </Text>
-          </TouchableOpacity>
-          {routes.map((route) => {
-            const isActive = selectedRoute?.myid === route.myid;
-            const busCount = buses.filter((b) => b.routeId === route.myid).length;
-            return (
-              <TouchableOpacity
-                key={route.myid}
-                style={[styles.routePill, isActive && { backgroundColor: route.color }]}
-                onPress={() => {
-                  setSelectedRoute(isActive ? null : route);
-                  setSelectedStop(null);
-                  if (isActive) { setBusRoutePath(null); cancelNavigation(); }
-                }}
-              >
-                <View style={[styles.routeColorDot, { backgroundColor: isActive ? '#FFF' : route.color }]} />
-                <Text style={[styles.routePillText, isActive && styles.routePillTextActive]} numberOfLines={1}>
-                  {route.name}
-                </Text>
-                {busCount > 0 && (
-                  <View style={[styles.busCountBadge, { backgroundColor: isActive ? 'rgba(255,255,255,0.3)' : route.color + '20' }]}>
-                    <Text style={[styles.busCountText, { color: isActive ? '#FFF' : route.color }]}>{busCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+      {/* Consolidated Bottom Panel */}
+      {!loading && (
+        <View style={[styles.panel, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          {/* Handle */}
+          <View style={styles.panelHandle} />
 
-      {/* Fetching path indicator */}
-      {fetchingPath && (
-        <View style={styles.fetchingBar}>
-          <ActivityIndicator size="small" color={colors.accent} />
-          <Text style={styles.fetchingText}>Loading route...</Text>
-        </View>
-      )}
-
-      {/* Walking Navigation Card */}
-      {navigating && navPath && (
-        <View style={[styles.navCard, { bottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.navCardHeader}>
-            <View style={styles.navCardIconWrap}>
-              <Footprints size={20} color="#4285F4" />
-            </View>
-            <View style={styles.navCardInfo}>
-              <Text style={styles.navCardTitle} numberOfLines={1}>Walking to {navPath.destination}</Text>
-              <View style={styles.navCardDetails}>
-                <Text style={styles.navCardDuration}>{navPath.duration}</Text>
-                <View style={styles.navCardDot} />
-                <Text style={styles.navCardDistance}>{navPath.distance}</Text>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.navCardClose} onPress={cancelNavigation}>
-              <X size={18} color="#9CA3AF" />
-            </TouchableOpacity>
+          {/* Content Area */}
+          <View style={styles.panelContent}>
+            {renderPanelContent()}
           </View>
-          <View style={styles.navCardProgress}>
-            <View style={[styles.navCardProgressFill, { backgroundColor: '#4285F4' }]} />
-          </View>
-        </View>
-      )}
-
-      {/* Active Buses Info Bar */}
-      {buses.length > 0 && !selectedStop && !navigating && (
-        <View style={[styles.busInfoBar, { bottom: Math.max(insets.bottom, 16) + 16 }]}>
-          {filteredBuses.map((bus) => (
-            <TouchableOpacity
-              key={bus.busId}
-              style={styles.busInfoCard}
-              onPress={() => {
-                mapRef.current?.animateToRegion({
-                  latitude: parseFloat(bus.latitude),
-                  longitude: parseFloat(bus.longitude),
-                  latitudeDelta: 0.005,
-                  longitudeDelta: 0.005,
-                }, 300);
-              }}
-            >
-              <View style={[styles.busInfoIcon, { backgroundColor: bus.color || colors.accent }]}>
-                <Bus size={14} color="#FFF" />
-              </View>
-              <View style={styles.busInfoText}>
-                <Text style={styles.busInfoRoute} numberOfLines={1}>{bus.route}</Text>
-                <Text style={styles.busInfoName}>Bus {bus.busName}</Text>
-              </View>
-              <View style={styles.busInfoLive}>
-                <View style={[styles.liveDotSmall, { backgroundColor: '#22C55E' }]} />
-                <Text style={styles.busInfoLiveText}>Live</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Selected Stop Card */}
-      {selectedStop && !navigating && (
-        <View style={[styles.stopCard, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.stopCardHeader}>
-            <View style={[styles.stopCardIcon, { backgroundColor: (selectedStop.color || colors.accent) + '18' }]}>
-              <CircleDot size={20} color={selectedStop.color || colors.accent} />
-            </View>
-            <View style={styles.stopCardInfo}>
-              <Text style={styles.stopCardName}>{selectedStop.name}</Text>
-              <Text style={styles.stopCardRoutes}>
-                {selectedStop.routeNames?.join(' \u2022 ') || 'Shuttle stop'}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.stopCardClose} onPress={() => setSelectedStop(null)}>
-              <X size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity
-            style={styles.directionsBtn}
-            onPress={() => startNavigation(selectedStop)}
-          >
-            <Navigation size={16} color="#FFF" />
-            <Text style={styles.directionsBtnText}>Directions</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Error overlay */}
-      {error && (
-        <View style={styles.errorBar}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => { setError(null); loadData(); }}>
-            <Text style={styles.errorRetry}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* No buses message */}
-      {!loading && buses.length === 0 && !error && (
-        <View style={[styles.noBusBar, { bottom: Math.max(insets.bottom, 16) + 16 }]}>
-          <Bus size={18} color="#9CA3AF" />
-          <Text style={styles.noBusText}>No shuttles currently in service</Text>
         </View>
       )}
     </Animated.View>
@@ -706,7 +861,7 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, gap: 10,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFFEE',
+    width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFFEE',
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
   },
@@ -720,35 +875,11 @@ const createStyles = (colors) => StyleSheet.create({
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
   liveText: { fontSize: 11, fontWeight: '500', color: '#6B7280' },
   refreshBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFFEE',
+    width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFFEE',
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
   },
   refreshBtnActive: { backgroundColor: colors.accent },
-
-  // Route pills
-  routeBar: { position: 'absolute', top: 120, left: 0, right: 0 },
-  routeScroll: { paddingHorizontal: 16, gap: 8 },
-  routePill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 24, backgroundColor: '#FFFFFFEE',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
-  },
-  routePillActive: { backgroundColor: colors.buttonPrimary },
-  routeColorDot: { width: 8, height: 8, borderRadius: 4 },
-  routePillText: { fontSize: 13, fontWeight: '600', color: '#374151', maxWidth: 130 },
-  routePillTextActive: { color: '#FFF' },
-  busCountBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginLeft: 2 },
-  busCountText: { fontSize: 10, fontWeight: '700' },
-
-  // Fetching indicator
-  fetchingBar: {
-    position: 'absolute', top: 165, alignSelf: 'center',
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#FFFFFFEE', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
-  },
-  fetchingText: { fontSize: 12, fontWeight: '500', color: '#6B7280' },
 
   // Stop markers
   stopMarker: {
@@ -767,79 +898,115 @@ const createStyles = (colors) => StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
 
-  // Bus info bar
-  busInfoBar: { position: 'absolute', left: 16, right: 16 },
-  busInfoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#FFFFFFFA', borderRadius: 16, padding: 14, marginBottom: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4,
-  },
-  busInfoIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  busInfoText: { flex: 1 },
-  busInfoRoute: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
-  busInfoName: { fontSize: 12, fontWeight: '400', color: '#6B7280', marginTop: 1 },
-  busInfoLive: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  liveDotSmall: { width: 6, height: 6, borderRadius: 3 },
-  busInfoLiveText: { fontSize: 11, fontWeight: '600', color: '#22C55E' },
-
-  // Stop card
-  stopCard: {
+  // ── Bottom Panel ──
+  panel: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#FFFFFFFA', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 20, paddingTop: 20,
+    backgroundColor: '#FFFFFFFA',
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 10,
   },
-  stopCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  stopCardIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  stopCardInfo: { flex: 1 },
-  stopCardName: { fontSize: 17, fontWeight: '700', color: '#1A1A2E' },
-  stopCardRoutes: { fontSize: 13, fontWeight: '400', color: '#6B7280', marginTop: 2 },
-  stopCardClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  directionsBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#4285F4', borderRadius: 14, paddingVertical: 14, marginTop: 16,
+  panelHandle: {
+    width: 36, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB',
+    alignSelf: 'center', marginBottom: 10,
   },
-  directionsBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 
-  // Navigation card
-  navCard: {
-    position: 'absolute', left: 16, right: 16,
-    backgroundColor: '#FFFFFFFA', borderRadius: 20,
-    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 10,
+  panelContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+
+  // Error content
+  panelError: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#FEE2E2', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
   },
-  navCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  navCardIconWrap: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: '#4285F414',
+  panelErrorText: { color: '#DC2626', fontSize: 13, fontWeight: '500', flex: 1 },
+  panelErrorRetry: { color: '#DC2626', fontSize: 13, fontWeight: '700', marginLeft: 12 },
+
+  // Close button (shared)
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6',
     alignItems: 'center', justifyContent: 'center',
   },
-  navCardInfo: { flex: 1 },
-  navCardTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
-  navCardDetails: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  navCardDuration: { fontSize: 14, fontWeight: '600', color: '#4285F4' },
-  navCardDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB' },
-  navCardDistance: { fontSize: 13, fontWeight: '500', color: '#6B7280' },
-  navCardClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  navCardProgress: {
-    height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, marginTop: 14, overflow: 'hidden',
-  },
-  navCardProgressFill: { width: '100%', height: '100%', borderRadius: 2 },
 
-  // Error
-  errorBar: {
-    position: 'absolute', top: 170, left: 16, right: 16,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FEE2E2', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
+  // Tracking content
+  trackingIcon: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
   },
-  errorText: { color: '#DC2626', fontSize: 13, fontWeight: '500', flex: 1 },
-  errorRetry: { color: '#DC2626', fontSize: 13, fontWeight: '700', marginLeft: 12 },
+  trackingRoute: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
+  trackingSub: { fontSize: 12, fontWeight: '400', color: '#6B7280', marginTop: 1 },
+  trackingMeta: { alignItems: 'center', gap: 2 },
+  trackingLiveRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  trackingLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  trackingSpeed: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
 
-  // No bus
-  noBusBar: {
-    position: 'absolute', left: 16, right: 16,
+  timeline: { marginTop: 14, paddingBottom: 2 },
+  timelineLabel: { fontSize: 11, fontWeight: '600', color: '#9CA3AF', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  timelineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
+  timelineDotCol: { width: 12, alignItems: 'center' },
+  timelineDot: { width: 10, height: 10, borderRadius: 5 },
+  timelineLine: { width: 2, height: 18, marginTop: 3 },
+  timelineStop: { flex: 1, fontSize: 13, fontWeight: '500', color: '#374151' },
+  timelineStopBold: { fontWeight: '700', color: '#1A1A2E' },
+  etaBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  etaText: { fontSize: 11, fontWeight: '700' },
+  distText: { fontSize: 10, fontWeight: '500', color: '#9CA3AF', width: 48, textAlign: 'right' },
+
+  // Navigation content
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  navIcon: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#4285F414',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  navTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
+  navDetails: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  navDuration: { fontSize: 13, fontWeight: '600', color: '#4285F4' },
+  navDotSep: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB' },
+  navDist: { fontSize: 12, fontWeight: '500', color: '#6B7280' },
+  navProgress: {
+    height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, marginTop: 12, overflow: 'hidden',
+  },
+  navProgressFill: { width: '100%', height: '100%', borderRadius: 2, backgroundColor: '#4285F4' },
+
+  // Stop details content
+  stopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stopIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stopName: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
+  stopRoutes: { fontSize: 12, fontWeight: '400', color: '#6B7280', marginTop: 1 },
+  directionsBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#FFFFFFFA', borderRadius: 16, paddingVertical: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
+    backgroundColor: '#4285F4', borderRadius: 12, paddingVertical: 12, marginTop: 12,
   },
-  noBusText: { color: '#9CA3AF', fontSize: 14, fontWeight: '500' },
+  directionsBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+
+  // Bus list content
+  busList: { maxHeight: 200 },
+  busRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F3F4F6',
+  },
+  busRowIcon: {
+    width: 32, height: 32, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  busRowRoute: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1A1A2E' },
+  busRowName: { fontSize: 12, fontWeight: '400', color: '#6B7280' },
+  busRowLive: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
+  busRowLiveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#22C55E' },
+  busRowLiveText: { fontSize: 10, fontWeight: '600', color: '#22C55E' },
+
+  // Empty / loading states
+  panelEmpty: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 16,
+  },
+  panelEmptyText: { color: '#9CA3AF', fontSize: 14, fontWeight: '500' },
+  panelLoading: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 16,
+  },
+  panelLoadingText: { fontSize: 12, fontWeight: '500', color: '#6B7280' },
 });

@@ -28,6 +28,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { eventsService } from '../services/events.service';
 import { useTheme } from '../context/ThemeContext';
 import { withOpacity } from '../utils/safeColor';
+import SmartIcon from '../components/SmartIcon';
+import { getEventIcon } from '../config/clubLogos';
 import BottomNav from '../components/BottomNav';
 
 const FILTERS_STORAGE_KEY = 'jumbonow_discover_filters';
@@ -358,7 +360,7 @@ export default function DiscoverScreen({ navigation }) {
       >
         <View style={styles.eventCardTop}>
           <View style={[styles.eventIconContainer, { backgroundColor: withOpacity(event.color, '18', colors.accent) }]}>
-            <Text style={styles.eventIcon}>{event.icon}</Text>
+            <SmartIcon value={getEventIcon(event)} size={28} borderRadius={10} />
           </View>
           <View style={styles.eventInfo}>
             <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>

@@ -26,6 +26,7 @@ import {
   Star,
   TrendingUp,
   Trash2,
+  ChevronRight,
 } from 'lucide-react-native';
 import { notificationsService } from '../services/notifications.service';
 import { useTheme } from '../context/ThemeContext';
@@ -80,6 +81,8 @@ export default function NotificationsScreen({ navigation }) {
   const filters = [
     { id: 'all', label: 'All' },
     { id: 'events', label: 'Events' },
+    { id: 'free_food', label: 'Free Food' },
+    { id: 'social', label: 'Social' },
     { id: 'system', label: 'System' },
   ];
 
@@ -96,6 +99,30 @@ export default function NotificationsScreen({ navigation }) {
       // revert on failure
       fetchNotifications();
     }
+  };
+
+  const handleNotificationPress = (notification) => {
+    markAsRead(notification.id);
+    if (notification.type === 'friend_request' || notification.type === 'friend_accepted') {
+      navigation.navigate('Friends');
+    } else if (notification.type === 'free_food' && notification.metadata?.post_id) {
+      navigation.navigate('FreeFood', { focusPostId: notification.metadata.post_id });
+    }
+  };
+
+  const isFriendNotification = (type) =>
+    type === 'friend_request' || type === 'friend_accepted';
+
+  const isFreeFoodNotification = (type) => type === 'free_food';
+
+  const getActionLabel = (notification) => {
+    if (isFriendNotification(notification.type)) {
+      return notification.type === 'friend_request' ? 'View request' : 'View friends';
+    }
+    if (isFreeFoodNotification(notification.type)) {
+      return 'View food';
+    }
+    return null;
   };
 
   const markAllAsRead = async () => {
@@ -140,7 +167,7 @@ export default function NotificationsScreen({ navigation }) {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
           <ArrowLeft size={22} color={colors.accent} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -153,7 +180,7 @@ export default function NotificationsScreen({ navigation }) {
         </View>
         <View style={styles.headerRight}>
           {unreadCount > 0 && (
-            <TouchableOpacity style={styles.iconBtn} onPress={markAllAsRead}>
+            <TouchableOpacity style={styles.iconBtn} onPress={markAllAsRead} accessibilityLabel="Mark all as read" accessibilityRole="button">
               <CheckCheck size={18} color={colors.accent} />
             </TouchableOpacity>
           )}
@@ -167,6 +194,9 @@ export default function NotificationsScreen({ navigation }) {
             key={filter.id}
             style={[styles.filterChip, activeFilter === filter.id && styles.filterChipActive]}
             onPress={() => setActiveFilter(filter.id)}
+            accessibilityLabel={`Filter: ${filter.label}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: activeFilter === filter.id }}
           >
             <Text style={[styles.filterChipText, activeFilter === filter.id && styles.filterChipTextActive]}>
               {filter.label}
@@ -189,7 +219,7 @@ export default function NotificationsScreen({ navigation }) {
               <Bell size={48} color={colors.accentMuted} />
               <Text style={styles.emptyTitle}>Something went wrong</Text>
               <Text style={styles.emptySubtext}>{error}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={() => { setLoading(true); fetchNotifications(); }}>
+              <TouchableOpacity style={styles.retryButton} onPress={() => { setLoading(true); fetchNotifications(); }} accessibilityLabel="Retry loading notifications" accessibilityRole="button">
                 <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
             </View>
@@ -213,8 +243,10 @@ export default function NotificationsScreen({ navigation }) {
                   <TouchableOpacity
                     key={notification.id}
                     style={[styles.notificationCard, styles.notificationUnread]}
-                    onPress={() => markAsRead(notification.id)}
+                    onPress={() => handleNotificationPress(notification)}
                     activeOpacity={0.8}
+                    accessibilityLabel={`${notification.title}: ${notification.body}, ${notification.time}`}
+                    accessibilityRole="button"
                   >
                     <View style={styles.notificationLeft}>
                       <View style={[styles.notifIconContainer, { backgroundColor: withOpacity(notification.color, '20', colors.accent) }]}>
@@ -225,12 +257,24 @@ export default function NotificationsScreen({ navigation }) {
                     <View style={styles.notificationContent}>
                       <Text style={styles.notifTitle}>{notification.title}</Text>
                       <Text style={styles.notifBody}>{notification.body}</Text>
-                      <Text style={styles.notifTime}>{notification.time}</Text>
+                      <View style={styles.notifFooter}>
+                        <Text style={styles.notifTime}>{notification.time}</Text>
+                        {getActionLabel(notification) && (
+                          <View style={styles.actionLabel}>
+                            <Text style={styles.actionLabelText}>
+                              {getActionLabel(notification)}
+                            </Text>
+                            <ChevronRight size={12} color={colors.accent} />
+                          </View>
+                        )}
+                      </View>
                     </View>
                     <TouchableOpacity
                       style={styles.deleteBtn}
                       onPress={() => deleteNotification(notification.id)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityLabel={`Delete notification: ${notification.title}`}
+                      accessibilityRole="button"
                     >
                       <Trash2 size={14} color={colors.accentMuted} />
                     </TouchableOpacity>
@@ -242,7 +286,7 @@ export default function NotificationsScreen({ navigation }) {
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Earlier</Text>
                   {notifications.length > 3 && (
-                    <TouchableOpacity onPress={clearAll}>
+                    <TouchableOpacity onPress={clearAll} accessibilityLabel="Clear all notifications" accessibilityRole="button">
                       <Text style={styles.clearAllText}>Clear all</Text>
                     </TouchableOpacity>
                   )}
@@ -254,7 +298,10 @@ export default function NotificationsScreen({ navigation }) {
                   <TouchableOpacity
                     key={notification.id}
                     style={styles.notificationCard}
+                    onPress={() => handleNotificationPress(notification)}
                     activeOpacity={0.8}
+                    accessibilityLabel={`${notification.title}: ${notification.body}, ${notification.time}`}
+                    accessibilityRole="button"
                   >
                     <View style={styles.notificationLeft}>
                       <View style={[styles.notifIconContainer, { backgroundColor: withOpacity(notification.color, '15', colors.accent) }]}>
@@ -264,12 +311,24 @@ export default function NotificationsScreen({ navigation }) {
                     <View style={styles.notificationContent}>
                       <Text style={[styles.notifTitle, { opacity: 0.7 }]}>{notification.title}</Text>
                       <Text style={[styles.notifBody, { opacity: 0.5 }]}>{notification.body}</Text>
-                      <Text style={styles.notifTime}>{notification.time}</Text>
+                      <View style={styles.notifFooter}>
+                        <Text style={styles.notifTime}>{notification.time}</Text>
+                        {getActionLabel(notification) && (
+                          <View style={[styles.actionLabel, { opacity: 0.6 }]}>
+                            <Text style={styles.actionLabelText}>
+                              {getActionLabel(notification)}
+                            </Text>
+                            <ChevronRight size={12} color={colors.accent} />
+                          </View>
+                        )}
+                      </View>
                     </View>
                     <TouchableOpacity
                       style={styles.deleteBtn}
                       onPress={() => deleteNotification(notification.id)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityLabel={`Delete notification: ${notification.title}`}
+                      accessibilityRole="button"
                     >
                       <Trash2 size={14} color={colors.accentMuted} />
                     </TouchableOpacity>
@@ -298,8 +357,8 @@ const createStyles = (colors) => StyleSheet.create({
     borderBottomColor: colors.accentBorder,
   },
   backButton: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: colors.cardBorder,
     alignItems: 'center',
@@ -331,12 +390,12 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '800',
   },
   headerRight: {
-    width: 42,
+    width: 44,
     alignItems: 'flex-end',
   },
   iconBtn: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: colors.cardBorder,
     alignItems: 'center',
@@ -447,10 +506,25 @@ const createStyles = (colors) => StyleSheet.create({
     lineHeight: 19,
     marginBottom: 6,
   },
+  notifFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   notifTime: {
     color: colors.accentMuted,
     fontSize: 11,
     fontWeight: '500',
+  },
+  actionLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  actionLabelText: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '700',
   },
   deleteBtn: {
     paddingTop: 4,

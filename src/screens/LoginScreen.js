@@ -159,6 +159,8 @@ export default function LoginScreen({ navigation }) {
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
                 keyboardType="email-address"
                 onFocus={() => setFocusedField('email')}
                 onBlur={() => setFocusedField(null)}

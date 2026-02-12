@@ -59,10 +59,13 @@ export const chatService = {
   },
 
   async getMessages(conversationId, { limit = 50, before } = {}) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
     let query = supabase
       .from('messages')
       .select(`
-        *,
+        id, conversation_id, sender_id, text, read, created_at, metadata,
         sender:profiles!messages_sender_id_fkey(id, username, display_name, avatar_url, avatar_color)
       `)
       .eq('conversation_id', conversationId)
@@ -78,11 +81,12 @@ export const chatService = {
     return (data || []).reverse();
   },
 
-  async sendMessage(conversationId, text) {
+  async sendMessage(conversationId, text, metadata = {}) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    if (!text?.trim()) throw new Error('Message cannot be empty');
+    const isEventShare = metadata?.type === 'event_share';
+    if (!isEventShare && !text?.trim()) throw new Error('Message cannot be empty');
 
     // Rate limit: max 30 messages per minute
     const { data: allowed } = await supabase.rpc('check_rate_limit', {
@@ -101,7 +105,8 @@ export const chatService = {
       .insert({
         conversation_id: conversationId,
         sender_id: user.id,
-        text: text.trim(),
+        text: isEventShare ? (text || '') : text.trim(),
+        metadata,
       })
       .select(`
         *,
@@ -112,10 +117,11 @@ export const chatService = {
     if (error) throw error;
 
     // Update conversation last message
+    const preview = isEventShare ? 'Shared an event' : text.trim().slice(0, 100);
     await supabase
       .from('conversations')
       .update({
-        last_message_text: text.trim().slice(0, 100),
+        last_message_text: preview,
         last_message_at: new Date().toISOString(),
       })
       .eq('id', conversationId);

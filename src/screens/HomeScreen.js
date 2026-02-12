@@ -24,16 +24,19 @@ import {
   Plus,
   Bookmark,
   UtensilsCrossed,
+  Pizza,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { eventsService } from '../services/events.service';
 import { freeFoodService } from '../services/freefood.service';
 import { useTheme } from '../context/ThemeContext';
 import { withOpacity } from '../utils/safeColor';
+import SmartIcon from '../components/SmartIcon';
+import { getEventIcon } from '../config/clubLogos';
 import BottomNav from '../components/BottomNav';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const FEATURED_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.67);
+const FEATURED_CARD_WIDTH = Math.round(SCREEN_WIDTH * 0.75);
 const FILTERS_STORAGE_KEY = 'jumbonow_home_filters';
 
 // Fallback background images for featured events without their own image
@@ -340,7 +343,7 @@ export default function HomeScreen({ navigation }) {
         {/* Row 1: Icon + Title + Organizer */}
         <View style={styles.eventTopRow}>
           <View style={[styles.eventIconWrap, { backgroundColor: withOpacity(event.color, '20', colors.accent) }]}>
-            <Text style={styles.eventIcon}>{event.icon || '\uD83C\uDF89'}</Text>
+            <SmartIcon value={getEventIcon(event)} size={28} borderRadius={10} />
           </View>
           <View style={styles.eventTitleBlock}>
             <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
@@ -640,16 +643,20 @@ export default function HomeScreen({ navigation }) {
             activeOpacity={0.8}
           >
             <UtensilsCrossed size={16} color="#F59E0B" />
-            <Text style={styles.fabMenuText}>Dining Menus</Text>
+            <Text style={styles.fabMenuText}>Dining & Food</Text>
           </TouchableOpacity>
-          <View style={styles.fabMenuDivider} />
           <TouchableOpacity
-            style={styles.fabMenuItem}
+            style={styles.fabSubItem}
             onPress={() => { setShowFabMenu(false); navigation.navigate('FreeFood'); }}
             activeOpacity={0.8}
           >
-            <Text style={styles.fabMenuEmoji}>{'\u{1F355}'}</Text>
-            <Text style={styles.fabMenuText}>Free Food</Text>
+            <Pizza size={14} color="#22C55E" />
+            <Text style={styles.fabSubText}>Free Food</Text>
+            {activeFoodCount > 0 && (
+              <View style={styles.fabFoodBadge}>
+                <Text style={styles.fabFoodBadgeText}>{activeFoodCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -723,7 +730,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
 
   // -- Featured --
-  featuredSection: { marginBottom: 18, marginTop: 10 },
+  featuredSection: { marginBottom: 8, marginTop: 10 },
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -751,7 +758,7 @@ const createStyles = (colors) => StyleSheet.create({
   featuredMetaText: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600' },
 
   // -- Filters --
-  filtersContainer: { paddingHorizontal: 20, gap: 8, marginTop: 16, marginBottom: 12 },
+  filtersContainer: { paddingHorizontal: 20, gap: 8, marginTop: 6, marginBottom: 12 },
   filterChip: {
     paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12,
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, flexShrink: 0,
@@ -829,7 +836,7 @@ const createStyles = (colors) => StyleSheet.create({
     position: 'absolute',
     bottom: 155,
     right: 20,
-    backgroundColor: colors.card,
+    backgroundColor: colors.headerBg,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.cardBorder,
@@ -849,7 +856,27 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: 13,
   },
   fabMenuText: { fontSize: 14, fontWeight: '700', color: colors.text },
-  fabMenuEmoji: { fontSize: 16 },
+  fabSubItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingLeft: 42,
+    paddingVertical: 10,
+    backgroundColor: colors.background,
+  },
+  fabSubText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  fabFoodBadge: {
+    backgroundColor: '#22C55E',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    marginLeft: 2,
+  },
+  fabFoodBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800' },
   fabMenuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.cardBorder },
   fabWrap: { position: 'absolute', bottom: 90, right: 20, zIndex: 12 },
   fab: {

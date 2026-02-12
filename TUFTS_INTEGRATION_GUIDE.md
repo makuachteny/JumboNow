@@ -22,7 +22,8 @@
 14. [Environment Variables Reference](#14-environment-variables-reference)
 15. [Database Schema Reference](#15-database-schema-reference)
 16. [API Endpoints Reference](#16-api-endpoints-reference)
-17. [Implementation Timeline](#17-implementation-timeline)
+17. [Cost Breakdown for Tufts](#17-cost-breakdown-for-tufts)
+18. [Implementation Timeline](#18-implementation-timeline)
 
 ---
 
@@ -75,6 +76,13 @@ React Native (Expo SDK 54)
 | Dining menus | WORKING | Nutrislice API (no key) |
 | Dining hours/status | WORKING | Nutrislice API `operating_status` |
 | Campus map (basic) | WORKING | Hardcoded 19 locations |
+| Live shuttle tracking | WORKING | Passio GO API (System ID: 6670) |
+| Shuttle route schedules | WORKING | Hardcoded 7 routes in MapScreen |
+| Dining real logos | WORKING | Nutrislice API logo URLs |
+| Organization logo upload | WORKING | Supabase Storage (event-images/org-logos/) |
+| QR codes on tickets | WORKING | react-native-qrcode-svg |
+| Campus resources (15 tiles) | WORKING | ProfileScreen + CampusResourcesScreen |
+| SmartIcon (URL/emoji) | WORKING | Universal icon component |
 | Achievements | WORKING | Supabase `achievements` + RPC |
 | Event ratings | WORKING | Supabase `event_reservations.rating` |
 | Content reporting | WORKING | Supabase `reports` |
@@ -82,6 +90,11 @@ React Native (Expo SDK 54)
 | Dark/Light theme | WORKING | AsyncStorage + ThemeContext |
 | Deep linking | WORKING | `jumbonow://` scheme |
 | Real-time updates | WORKING | Supabase Realtime (all tables) |
+| Group chat | WORKING | Auto-created per friend group |
+| Event sharing in chat | WORKING | DM + group chat event cards |
+| Discover all users | WORKING | Browse non-friend users in Friends tab |
+| Free food request flow | WORKING | Request/confirm/decline with codes |
+| Free food image upload | WORKING | Supabase Storage (free-food-images/) |
 
 ---
 
@@ -94,7 +107,7 @@ URL:      https://vdzvbbvgcubqlgnwjuxa.supabase.co
 Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkenZiYnZnY3VicWxnbndqdXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NjkwNjksImV4cCI6MjA4NjE0NTA2OX0.RNwT3CFzhdAw-yDSWP_UYnKsR5N2iB9WLKIzdRZmcN4
 ```
 
-### Tables (22 migrations applied)
+### Tables (26 migrations applied)
 
 | Table | Purpose | RLS |
 |-------|---------|-----|
@@ -116,6 +129,9 @@ Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6I
 | `user_achievements` | Unlocked achievements | Yes |
 | `search_logs` | Search queries for trending | Yes |
 | `reports` | Content reports | Yes |
+| `group_conversations` | Group chat conversations (auto-created per friend group) | Yes |
+| `group_messages` | Group chat messages | Yes |
+| `free_food_requests` | Free food request-to-accept flow with confirmation codes | Yes |
 
 ### Database Functions (RPCs)
 
@@ -142,6 +158,9 @@ Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6I
 | `trg_set_free_food_expiry` | `free_food_posts` INSERT | Default 2hr expiry |
 | `profiles_updated_at` | `profiles` UPDATE | Timestamp auto-update |
 | `events_updated_at` | `events` UPDATE | Timestamp auto-update |
+| `notify_free_food_requested` | `free_food_requests` INSERT | Notify poster of new request |
+| `trg_auto_create_group_convo` | `friend_groups` INSERT | Auto-create group chat for new friend group |
+| `trg_cleanup_free_food_notifications` | `free_food_posts` UPDATE (deactivation) | Clean up related notifications |
 
 ### Rate Limits (Enforced via RPC)
 
@@ -259,7 +278,7 @@ Response structure per day:
 | Push notifications | 2-3 days | HIGH | Expo + Supabase Edge Function |
 | Event image upload | 1 day | MEDIUM | Supabase Storage (bucket exists) |
 | Apple/Google Wallet pass | 2-3 days | LOW | Edge Function + Apple Dev Account |
-| Shuttle tracking | 1-2 weeks | LOW | Tufts TransLoc/Passio Go API |
+| ~~Shuttle tracking~~ | ~~DONE~~ | ~~N/A~~ | Fully integrated via Passio GO (System ID: 6670) |
 | Tufts SSO (Shibboleth) | 1-2 weeks | OPTIONAL | Tufts IT approval |
 | Real busyness data | 1 week | OPTIONAL | SafeGraph/Placer.ai or manual |
 
@@ -526,58 +545,45 @@ Authorization: Bearer <service_account_token>
 
 ---
 
-## 10. Shuttle Tracking
+## 10. Shuttle Tracking (Fully Integrated)
 
-### Current State
-- `ShuttleScreen` is referenced in navigation but has no service
-- No shuttle API is integrated
+### Current State: WORKING
 
-### Tufts Shuttle System
-Tufts uses **Passio GO** for shuttle tracking (previously TransLoc).
+Live shuttle tracking is fully integrated into MapScreen and ShuttleScreen using the **Passio GO** public API (System ID: 6670).
 
-### Passio GO API
+### What's Working
+
+- **Real-time vehicle positions** polled every 10 seconds via Passio GO API
+- **7 shuttle routes** with hardcoded schedules and color-coded map overlays
+- **Animated shuttle markers** showing live bus positions on the campus map
+- **ShuttleScreen** with route list, schedules, and route details
+- **MapScreen integration** with shuttle toggle to show/hide live shuttles
+
+### Passio GO API (No Key Required)
+
 ```
-Base URL: https://passio3.com/api
+Base URL: https://passio3.com/passioTransit/gtfs/realtime/vehiclePositions.json?
+System ID: 6670
 
-# Get routes for Tufts
-GET /routes?agency=tufts
-
-# Get real-time vehicle positions
-GET /vehicles?agency=tufts
-
-# Get route stops
-GET /stops?agency=tufts&route={routeId}
-
-# Get ETAs at a stop
-GET /eta?agency=tufts&stop={stopId}
+# Get real-time vehicle positions for Tufts
+GET https://passio3.com/passioTransit/gtfs/realtime/vehiclePositions.json?sysid=6670
 ```
 
-**Note**: Passio GO API may require contacting Passio (https://passiotech.com) for API access. Some universities have public feeds, others require authorization.
+### 7 Shuttle Routes Supported
 
-### Alternative: GTFS-RT Feed
+| Route | Service | Hours |
+|-------|---------|-------|
+| Joey | Medford Campus Loop | Mon-Fri 7AM-7PM |
+| Campus Connector | Medford ↔ SMFA | Mon-Fri 8AM-6PM |
+| Davis Square | Campus ↔ Davis Sq | Mon-Fri 7AM-11PM |
+| Boston Avenue | Boston Ave Loop | Mon-Fri 7:30AM-6PM |
+| Late Night | Extended Campus | Thu-Sat 9PM-2AM |
+| Weekend | Weekend Service | Sat-Sun 10AM-6PM |
+| Health Sciences | Campus ↔ Medical | Mon-Fri 7AM-5PM |
 
-Tufts may publish a GTFS Realtime feed. Check:
-```
-https://passio3.com/tufts/passioTransit/gtfs-rt/tripUpdates
-https://passio3.com/tufts/passioTransit/gtfs-rt/vehiclePositions
-```
+### Cost: Free (public GTFS-RT feed, no API key or vendor agreement needed)
 
-### What You Need from Tufts
-
-- Confirm which shuttle tracking provider they use (Passio GO / TransLoc / other)
-- Request API access or confirm public GTFS-RT feed availability
-- Contact: Tufts Parking & Transportation Services
-
-### Implementation
-
-1. Create `src/services/shuttle.service.js` with vehicle position polling (10s interval)
-2. Display routes on MapScreen with vehicle markers
-3. Show ETAs at stops
-4. Add ShuttleScreen with route list + map view
-
-### Cost: Free (if public GTFS-RT) or requires vendor agreement
-
-### Time to Implement: 1-2 weeks
+### No further integration needed.
 
 ---
 
@@ -895,6 +901,31 @@ category        text
 color           text
 read            boolean DEFAULT false
 created_at      timestamptz
+
+-- group_conversations (auto-created per friend group)
+id              uuid PRIMARY KEY
+group_id        uuid REFERENCES friend_groups
+name            text
+created_at      timestamptz
+
+-- group_messages
+id              uuid PRIMARY KEY
+conversation_id uuid REFERENCES group_conversations
+sender_id       uuid REFERENCES profiles
+text            text NOT NULL
+message_type    text DEFAULT 'text'  -- text | event_share
+event_id        uuid REFERENCES events  -- for event_share messages
+created_at      timestamptz
+
+-- free_food_requests
+id              uuid PRIMARY KEY
+post_id         uuid REFERENCES free_food_posts
+requester_id    uuid REFERENCES profiles
+status          text DEFAULT 'pending'  -- pending | accepted | declined
+confirmation_code text  -- 6-digit code
+created_at      timestamptz
+responded_at    timestamptz
+UNIQUE (post_id, requester_id)
 ```
 
 ---
@@ -902,6 +933,7 @@ created_at      timestamptz
 ## 16. API Endpoints Reference
 
 ### Supabase REST API
+
 All tables accessible via PostgREST at:
 ```
 https://vdzvbbvgcubqlgnwjuxa.supabase.co/rest/v1/{table}
@@ -909,6 +941,7 @@ https://vdzvbbvgcubqlgnwjuxa.supabase.co/rest/v1/{table}
 Authenticated with `apikey` header (anon key) + `Authorization: Bearer <access_token>`.
 
 ### Supabase Auth API
+
 ```
 POST /auth/v1/signup          -- Register
 POST /auth/v1/token?grant_type=password  -- Login
@@ -919,47 +952,176 @@ POST /auth/v1/resend          -- Resend confirmation
 ```
 
 ### Supabase Realtime
+
 ```
 wss://vdzvbbvgcubqlgnwjuxa.supabase.co/realtime/v1/websocket
 ```
-Channels subscribed to: events, event_attendees, event_reservations, friendships, conversations, messages, notifications, free_food_posts.
+Channels subscribed to: events, event_attendees, event_reservations, friendships, conversations, messages, notifications, free_food_posts, group_conversations, group_messages, free_food_requests.
 
 ### Supabase Storage
+
 ```
-POST   /storage/v1/object/event-images/{path}  -- Upload
-GET    /storage/v1/object/public/event-images/{path}  -- Download
-DELETE /storage/v1/object/event-images/{path}  -- Delete
+POST   /storage/v1/object/event-images/{path}       -- Upload event/org images
+GET    /storage/v1/object/public/event-images/{path} -- Download event/org images
+DELETE /storage/v1/object/event-images/{path}        -- Delete event/org images
+
+POST   /storage/v1/object/free-food-images/{path}       -- Upload free food photos
+GET    /storage/v1/object/public/free-food-images/{path} -- Download free food photos
+DELETE /storage/v1/object/free-food-images/{path}        -- Delete free food photos
 ```
 
 ### Nutrislice (Dining)
+
 ```
 GET https://tufts.api.nutrislice.com/menu/api/schools/?format=json
 GET https://tufts.api.nutrislice.com/menu/api/weeks/school/{slug}/menu-type/{meal}/{year}/{month}/{day}/
 ```
 
 ### Expo Push API
+
 ```
 POST https://exp.host/--/api/v2/push/send
 ```
 
 ---
 
-## 17. Implementation Timeline
+## 17. Cost Breakdown for Tufts
+
+> What it would cost the university to run and maintain JumboNow in production.
+
+### One-Time Costs
+
+| Item | Cost | Notes |
+|------|------|-------|
+| Apple Developer Account | $99 | Required for iOS App Store. Annual renewal (see below). |
+| Google Play Developer Account | $25 | One-time fee for Android Play Store listing. |
+| **Total One-Time** | **$124** | |
+
+### Monthly Recurring Costs
+
+#### Minimum Viable (Free Tier)
+
+Running on free tiers for a small launch (under ~500 active users):
+
+| Service | Monthly Cost | What You Get |
+|---------|-------------|--------------|
+| Supabase (Free) | $0 | 500MB database, 1GB storage, 2GB bandwidth, 500K Edge Function invocations, 50K monthly active users |
+| Google Maps Platform | $0 | $200/month free credit = ~28,000 map loads/month. Enough for a campus app. |
+| Expo / EAS Build (Free) | $0 | 30 builds/month, Expo Push Notifications (unlimited, free) |
+| Nutrislice Dining API | $0 | Public API, no key required, no usage limits known |
+| Passio GO Shuttle Data | $0 | Public GTFS-RT feed (System ID: 6670) |
+| Transact Mobile Ordering | $0 | Deep link only, no API contract needed |
+| **Total Monthly (Free Tier)** | **$0/month** | Suitable for launch and early growth |
+
+#### Recommended Production (Scaled)
+
+For a full campus deployment (1,000-5,000+ active users):
+
+| Service | Monthly Cost | What You Get |
+|---------|-------------|--------------|
+| Supabase Pro | $25/month | 8GB database, 100GB storage, 250GB bandwidth, unlimited API requests, SAML SSO support (required for Tufts Shibboleth), daily backups, email support |
+| Google Maps Platform | $0 | Still within free $200/month credit. Would only exceed at ~28K+ map loads/month (unlikely for a single campus). |
+| Expo / EAS Build (Free) | $0 | 30 builds/month is sufficient. Upgrade to $99/month only if faster build queues are needed. |
+| Nutrislice Dining API | $0 | No cost |
+| Passio GO Shuttle Data | $0 | No cost |
+| Custom domain (optional) | $12/year (~$1/month) | For jumbonow.app or similar (privacy policy, marketing page) |
+| **Total Monthly (Production)** | **$25-26/month** | Recommended for full campus rollout |
+
+#### High Scale (10,000+ users, optional upgrades)
+
+| Service | Monthly Cost | Notes |
+|---------|-------------|-------|
+| Supabase Pro | $25/month | Compute add-ons available if needed ($5-40/month for more CPU/RAM) |
+| EAS Build Priority (optional) | $99/month | Only needed if building frequently (CI/CD pipeline) |
+| Sentry Error Monitoring (optional) | $0 (free tier) | 5K errors/month free. Developer plan $26/month for more. |
+| **Total Monthly (High Scale)** | **$25-150/month** | Upper bound only if all optional services are added |
+
+### Annual Recurring Costs
+
+| Item | Annual Cost | Notes |
+|------|------------|-------|
+| Apple Developer Account renewal | $99/year | Required to keep iOS app on App Store |
+| Supabase Pro (if using SSO) | $300/year | $25/month x 12 |
+| Google Play (no renewal) | $0 | One-time fee already paid |
+| Google Maps Platform | $0 | Free credit covers campus usage |
+| **Total Annual (Production)** | **$399/year** | With SSO. Without SSO: $99/year (Apple only). |
+
+### Cost Comparison
+
+To put this in perspective for the university:
+
+| Solution | Estimated Annual Cost |
+|----------|--------------------|
+| **JumboNow (self-hosted on Supabase free tier)** | **$99/year** (Apple Developer only) |
+| **JumboNow (production with SSO)** | **$399/year** |
+| Commercial campus app (Ready Education, Modo Labs) | $25,000-75,000/year |
+| Custom development by vendor | $50,000-200,000 upfront + $10,000-30,000/year maintenance |
+| Student government app (typical) | $2,000-5,000/year (limited features) |
+
+JumboNow delivers a feature-rich campus app at a fraction of the cost of commercial alternatives.
+
+### What Tufts Would NOT Pay For
+
+These are already built and included at no additional cost:
+
+- Event management system (CRUD, search, RSVP, ticketing, invitations)
+- Social features (friends, groups, messaging, notifications)
+- Free food alert system with real-time updates
+- Dining menus with nutrition data (via Nutrislice)
+- Live shuttle tracking (via Passio GO)
+- Campus map with 19 locations and walking directions
+- QR code tickets with confirmation codes
+- Achievement and gamification system
+- Dark/light theme
+- Content moderation and reporting
+- Rate limiting and security measures
+- 15 campus resource quick-links
+
+### Optional Costs (Only If Desired)
+
+| Feature | Cost | Notes |
+|---------|------|-------|
+| Apple Wallet passes | Included in $99/year Apple Developer Account | No additional cost beyond the developer account |
+| Google Wallet passes | $0 | Google Wallet API is free |
+| Tufts SSO (Shibboleth) | $25/month (Supabase Pro) | Requires Tufts IT approval (free on their side) |
+| Custom domain | $10-15/year | For privacy policy page and marketing site |
+| EAS priority builds | $99/month | Only for frequent CI/CD builds, not needed for most teams |
+
+### Summary
+
+| Scenario | Year 1 Total | Ongoing Annual |
+|----------|-------------|----------------|
+| **Bare Minimum** (free tiers, no SSO) | $124 | $99/year |
+| **Recommended Production** (with SSO) | $424 | $399/year |
+| **All Optional Features** | $424-$1,612 | $399-$1,587/year |
+
+The recommended production setup costs Tufts approximately **$25-35/month** ($399/year including the Apple Developer Account), which is less than a single student meal plan for the entire year.
+
+---
+
+## 18. Implementation Timeline
 
 ### Already Complete (0 days remaining)
-- Supabase backend (all 22 migrations)
+
+- Supabase backend (all 26 migrations)
 - Auth flow (register, login, email verification, onboarding)
 - Events system (CRUD, search, RSVP, tickets, invitations, ratings)
 - Social features (friends, groups, messaging, notifications)
+- Group chat (auto-created per friend group, event sharing)
+- Discover all users (browse non-friend users)
 - Free food alerts with real-time updates
+- Free food request-to-accept flow with confirmation codes
+- Free food image upload to Supabase Storage
 - Dining menus via Nutrislice API
 - Campus map with 19 locations
+- Live shuttle tracking via Passio GO (7 routes, real-time vehicle positions)
 - Achievements and vibe score
 - Dark/light theme
 - Deep linking
 - Content reporting and rate limiting
 
 ### Phase 1: Critical (3-4 days)
+
 | Task | Time | Dependency |
 |------|------|------------|
 | Add Google Maps API key to `app.json` | 1 hour | Google Cloud account |
@@ -969,14 +1131,16 @@ POST https://exp.host/--/api/v2/push/send
 | Event image upload in CreateEventScreen | 6 hours | Supabase Storage policy |
 | Test all features end-to-end | 4 hours | All above complete |
 
-### Phase 2: Nice-to-Have (1 week)
+### Phase 2: Nice-to-Have (3 days)
+
 | Task | Time | Dependency |
 |------|------|------------|
 | Apple Wallet pass generation | 2 days | Apple Developer Account |
 | Google Wallet pass generation | 1 day | Google Cloud project |
-| Shuttle tracking integration | 3-5 days | Passio GO API access |
+| ~~Shuttle tracking integration~~ | ~~DONE~~ | Already integrated via Passio GO |
 
 ### Phase 3: Polish (3-5 days)
+
 | Task | Time | Dependency |
 |------|------|------------|
 | Tufts SSO (Shibboleth) | 1-2 weeks | Tufts IT approval |
@@ -984,18 +1148,31 @@ POST https://exp.host/--/api/v2/push/send
 | App Store submission (iOS + Android) | 2-3 days | Developer accounts |
 
 ### Total to Fully Functional App
+
 | Milestone | Cumulative Time |
 |-----------|----------------|
 | Core features working (current state) | Done |
-| + Maps + Push + Image Upload | +3-4 days |
-| + Wallet Passes + Shuttle | +1 more week |
+| + Shuttle tracking (Passio GO) | Done |
+| + Group chat, discover users, free food request flow | Done |
+| + Maps API key + Push + Image Upload | +3-4 days |
+| + Wallet Passes | +3 more days |
 | + SSO + App Store | +2 more weeks |
-| **Everything fully integrated** | **~3-4 weeks total** |
+| **Everything fully integrated** | **~3 weeks total** |
 
 ---
 
 ## Quick Start Checklist
 
+- [x] Supabase backend with 26 migrations, RLS on all tables
+- [x] Auth flow (register, login, email verification, onboarding)
+- [x] Events system (CRUD, search, RSVP, tickets, invitations, ratings)
+- [x] Social features (friends, groups, DMs, group chat, notifications)
+- [x] Discover all users (browse non-friend users in Friends tab)
+- [x] Free food alerts with request-to-accept flow and image upload
+- [x] Dining menus via Nutrislice API (11 locations, nutrition data)
+- [x] Live shuttle tracking via Passio GO (7 routes, real-time positions)
+- [x] Campus map with 19 locations
+- [x] Achievements, vibe score, content reporting, rate limiting
 - [ ] Get Google Maps API key and add to `app.json`
 - [ ] Set up Expo project on expo.dev for push notification project ID
 - [ ] Deploy `send-push` Supabase Edge Function
@@ -1007,4 +1184,3 @@ POST https://exp.host/--/api/v2/push/send
 - [ ] Create Google Play Developer Account ($25)
 - [ ] Build with EAS and submit to stores
 - [ ] (Optional) Contact Tufts IT for Shibboleth SSO registration
-- [ ] (Optional) Contact Passio GO for shuttle API access
