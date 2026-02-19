@@ -23,7 +23,6 @@ import {
   MapPin,
   Calendar,
   Star,
-  Zap,
   Clock,
   LogOut,
   ChevronRight,
@@ -314,16 +313,16 @@ export default function ProfileScreen({ navigation }) {
     { id: 'dining', label: 'Dining', Icon: Utensils, color: '#EF4444', navigate: 'Dining' },
     { id: 'canvas', label: 'Canvas', Icon: GraduationCap, color: '#E53E3E', url: 'https://canvas.tufts.edu' },
     { id: 'shuttle', label: 'Tufts Shuttle', Icon: Bus, color: '#3B82F6', navigate: 'Map' },
-    { id: 'health', label: 'Health & Wellness', Icon: HeartPulse, color: '#EC4899', url: 'https://students.tufts.edu/health-and-wellness' },
+    { id: 'health', label: 'Health & Wellness', Icon: HeartPulse, color: '#6AADE4', url: 'https://students.tufts.edu/health-and-wellness' },
     { id: 'safety', label: 'Be Safe', Icon: ShieldAlert, color: '#F59E0B', url: 'https://publicsafety.tufts.edu' },
-    { id: 'fitness', label: 'Fitness Center', Icon: Dumbbell, color: '#8B5CF6', url: 'https://ase.tufts.edu/campusrec' },
+    { id: 'fitness', label: 'Fitness Center', Icon: Dumbbell, color: '#3579C6', url: 'https://ase.tufts.edu/campusrec' },
     { id: 'athletics', label: 'Athletics', Icon: Trophy, color: '#3579C6', url: 'https://gotuftsjumbos.com' },
     { id: 'apps', label: 'Apps & Software', Icon: Monitor, color: '#6366F1', url: 'https://it.tufts.edu/software' },
     { id: 'laundry', label: 'Laundry', Icon: WashingMachine, color: '#14B8A6', url: 'https://www.laundryview.com/tufts' },
     { id: 'parking', label: 'Parking', Icon: Car, color: '#64748B', url: 'https://publicsafety.tufts.edu/parking-services' },
     { id: 'technology', label: 'Technology', Icon: Cpu, color: '#0EA5E9', url: 'https://it.tufts.edu' },
     { id: 'freefood', label: 'Free Food', Icon: Pizza, color: '#22C55E', navigate: 'FreeFood' },
-    { id: 'map', label: 'Campus Map', Icon: MapPin, color: '#D946EF', navigate: 'Map' },
+    { id: 'map', label: 'Campus Map', Icon: MapPin, color: '#418FDE', navigate: 'Map' },
     { id: 'studyspaces', label: 'Study Spaces', Icon: BookOpen, color: '#F97316', url: 'https://tischlibrary.tufts.edu' },
     { id: 'reserve', label: 'Reserve Tufts', Icon: Calendar, color: '#059669', url: 'https://reserve.tufts.edu/EmsWebApp/' },
   ];
@@ -419,7 +418,7 @@ export default function ProfileScreen({ navigation }) {
           {/* Stats Grid */}
           <View style={styles.statsGrid}>
             <TouchableOpacity style={[styles.statCard, activeSection === 'saved_events' && styles.statCardActive]} onPress={handleEventsStatPress} accessibilityLabel="View saved events" accessibilityRole="button">
-              <Zap size={20} color={colors.accent} />
+              <Star size={20} color={colors.accent} />
               <Text style={styles.statNumber}>{savedEventCount}</Text>
               <Text style={styles.statLabel}>Events</Text>
             </TouchableOpacity>
@@ -689,7 +688,7 @@ export default function ProfileScreen({ navigation }) {
 
             <Text style={styles.inputLabel}>Avatar Color</Text>
             <View style={styles.colorPicker}>
-              {['#6AADE4', '#3B82F6', '#6366F1', '#8B5CF6', '#7EC4F0', '#A8B8C8', '#EF4444', '#F59E0B', '#22C55E', '#3579C6'].map((color) => (
+              {['#6AADE4', '#3B82F6', '#418FDE', '#3579C6', '#7EC4F0', '#A8B8C8', '#2B6CB0', '#F59E0B', '#22C55E', '#1E5A9E'].map((color) => (
                 <TouchableOpacity
                   key={color}
                   style={[

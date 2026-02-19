@@ -9,7 +9,8 @@ export const eventsService = {
       .select(`
         *,
         host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-        attendee_count:event_attendees(count)
+        attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
       `)
       .gte('end_time', new Date().toISOString())
       .order('start_time', { ascending: true })
@@ -30,6 +31,7 @@ export const eventsService = {
     return data.map((event) => ({
       ...event,
       attendee_count: event.attendee_count?.[0]?.count || 0,
+      attendee_avatars: (event.attendee_avatars || []).slice(0, 3).map(a => a.profile).filter(Boolean),
     }));
   },
 
@@ -48,7 +50,8 @@ export const eventsService = {
         .select(`
           *,
           host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-          attendee_count:event_attendees(count)
+          attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
         `)
         .in('id', ids)
         .order('start_time', { ascending: true });
@@ -57,6 +60,7 @@ export const eventsService = {
       return (data || []).map((event) => ({
         ...event,
         attendee_count: event.attendee_count?.[0]?.count || 0,
+      attendee_avatars: (event.attendee_avatars || []).slice(0, 3).map(a => a.profile).filter(Boolean),
       }));
     } catch {
       // RPC may not exist yet (migration not applied), return empty gracefully
@@ -70,7 +74,8 @@ export const eventsService = {
       .select(`
         *,
         host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-        attendee_count:event_attendees(count)
+        attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
       `)
       .eq('is_featured', true)
       .gte('end_time', new Date().toISOString())
@@ -83,7 +88,8 @@ export const eventsService = {
         .select(`
           *,
           host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-          attendee_count:event_attendees(count)
+          attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
         `)
         .gte('end_time', new Date().toISOString())
         .order('start_time', { ascending: true })
@@ -94,6 +100,7 @@ export const eventsService = {
     return (data || []).map((event) => ({
       ...event,
       attendee_count: event.attendee_count?.[0]?.count || 0,
+      attendee_avatars: (event.attendee_avatars || []).slice(0, 3).map(a => a.profile).filter(Boolean),
     }));
   },
 
@@ -127,7 +134,8 @@ export const eventsService = {
       .select(`
         *,
         host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-        attendee_count:event_attendees(count)
+        attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
       `)
       .gte('end_time', now)
       .order('start_time', { ascending: true })
@@ -156,7 +164,8 @@ export const eventsService = {
         .select(`
           *,
           host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-          attendee_count:event_attendees(count)
+          attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
         `)
         .gte('end_time', now)
         .order('start_time', { ascending: true })
@@ -186,6 +195,7 @@ export const eventsService = {
     return (data || []).map((event) => ({
       ...event,
       attendee_count: event.attendee_count?.[0]?.count || 0,
+      attendee_avatars: (event.attendee_avatars || []).slice(0, 3).map(a => a.profile).filter(Boolean),
     }));
   },
 
@@ -204,7 +214,8 @@ export const eventsService = {
       .select(`
         *,
         host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-        attendee_count:event_attendees(count)
+        attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
       `)
       .textSearch('search_vector', searchTerms)
       .gte('end_time', new Date().toISOString())
@@ -221,7 +232,8 @@ export const eventsService = {
         .select(`
           *,
           host:profiles!events_created_by_fkey(id, username, display_name, avatar_url, is_verified),
-          attendee_count:event_attendees(count)
+          attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
         `)
         .or(`title.ilike.${pattern},description.ilike.${pattern},organizer_name.ilike.${pattern},location.ilike.${pattern}`)
         .gte('end_time', new Date().toISOString())
@@ -234,6 +246,7 @@ export const eventsService = {
     return (data || []).map((event) => ({
       ...event,
       attendee_count: event.attendee_count?.[0]?.count || 0,
+      attendee_avatars: (event.attendee_avatars || []).slice(0, 3).map(a => a.profile).filter(Boolean),
     }));
   },
 
@@ -278,12 +291,13 @@ export const eventsService = {
       .select(`
         *,
         host:profiles!events_created_by_fkey(*),
-        attendee_count:event_attendees(count)
+        attendee_count:event_attendees(count),
+        attendee_avatars:event_attendees(profile:profiles(id, avatar_url, display_name))
       `)
       .eq('id', eventId)
       .single();
     if (error) throw error;
-    return { ...data, attendee_count: data.attendee_count?.[0]?.count || 0 };
+    return { ...data, attendee_count: data.attendee_count?.[0]?.count || 0, attendee_avatars: (data.attendee_avatars || []).slice(0, 3).map(a => a.profile).filter(Boolean) };
   },
 
   async createEvent(eventData) {

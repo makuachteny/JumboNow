@@ -3,13 +3,13 @@ import { View, TouchableOpacity, Text, StyleSheet, Animated, Platform } from 're
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommonActions } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
-import { Calendar, Users, Map, Ticket, User } from 'lucide-react-native';
+import { Search, Send, Plus, Ticket, User } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 const tabs = [
-  { id: 'Map', label: 'Map', Icon: Map },
-  { id: 'Friends', label: 'Friends', Icon: Users },
-  { id: 'Home', label: 'Events', Icon: Calendar, isCenter: true },
+  { id: 'Home', label: 'Discover', Icon: Search },
+  { id: 'Friends', label: 'Conversations', Icon: Send },
+  { id: 'CreateEvent', label: 'Post', Icon: Plus, isCenter: true },
   { id: 'MyTickets', label: 'Tickets', Icon: Ticket },
   { id: 'Profile', label: 'Profile', Icon: User },
 ];
@@ -38,6 +38,11 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
   }, [visible]);
 
   const handleTabPress = (tabId) => {
+    // Center "+" button pushes CreateEvent instead of resetting
+    if (tabId === 'CreateEvent') {
+      navigation.navigate('CreateEvent');
+      return;
+    }
     navigation.dispatch(
       CommonActions.reset({
         index: 0,
@@ -45,6 +50,51 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
       })
     );
   };
+
+  const renderTabs = () =>
+    tabs.map((tab) => {
+      const isActive = activeTab === tab.id;
+      const { Icon } = tab;
+
+      if (tab.isCenter) {
+        return (
+          <TouchableOpacity
+            key={tab.id}
+            style={styles.centerTab}
+            onPress={() => handleTabPress(tab.id)}
+          >
+            <View style={[styles.centerButton, {
+              backgroundColor: colors.buttonPrimary,
+              shadowColor: colors.accent,
+            }]}>
+              <Icon size={22} color="#FFF" strokeWidth={2.5} />
+            </View>
+          </TouchableOpacity>
+        );
+      }
+
+      return (
+        <TouchableOpacity
+          key={tab.id}
+          style={styles.tab}
+          onPress={() => handleTabPress(tab.id)}
+        >
+          <View style={[styles.iconWrap, isActive && { backgroundColor: colors.accentBg }]}>
+            <Icon
+              size={22}
+              color={isActive ? colors.accent : colors.textMuted}
+              strokeWidth={isActive ? 2.5 : 1.8}
+            />
+          </View>
+          <Text style={[styles.label, {
+            color: isActive ? colors.accent : colors.textMuted,
+            fontWeight: isActive ? '600' : '400',
+          }]}>
+            {tab.label}
+          </Text>
+        </TouchableOpacity>
+      );
+    });
 
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ translateY: slideUp }], opacity: hideAnim, pointerEvents: visible ? 'auto' : 'none' }]}>
@@ -58,49 +108,7 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
             backgroundColor: colors.glass,
             borderTopColor: colors.glassBorder,
           }]} />
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            const { Icon } = tab;
-
-            if (tab.isCenter) {
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  style={styles.centerTab}
-                  onPress={() => handleTabPress(tab.id)}
-                >
-                  <View style={[styles.centerButton, {
-                    backgroundColor: isActive ? colors.accent : colors.buttonPrimary,
-                    shadowColor: colors.accent,
-                  }]}>
-                    <Icon size={22} color="#FFF" strokeWidth={2.2} />
-                  </View>
-                </TouchableOpacity>
-              );
-            }
-
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                style={styles.tab}
-                onPress={() => handleTabPress(tab.id)}
-              >
-                <View style={[styles.iconWrap, isActive && { backgroundColor: colors.accentBg }]}>
-                  <Icon
-                    size={22}
-                    color={isActive ? colors.accent : colors.textMuted}
-                    strokeWidth={isActive ? 2.5 : 1.8}
-                  />
-                </View>
-                <Text style={[styles.label, {
-                  color: isActive ? colors.accent : colors.textMuted,
-                  fontWeight: isActive ? '600' : '400',
-                }]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {renderTabs()}
         </BlurView>
       ) : (
         <View
@@ -110,48 +118,7 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
             borderTopColor: colors.glassBorder,
           }]}
         >
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            const { Icon } = tab;
-
-            if (tab.isCenter) {
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  style={styles.centerTab}
-                  onPress={() => handleTabPress(tab.id)}
-                >
-                  <View style={[styles.centerButton, {
-                    backgroundColor: isActive ? colors.accent : colors.buttonPrimary,
-                  }]}>
-                    <Icon size={22} color="#FFF" strokeWidth={2.2} />
-                  </View>
-                </TouchableOpacity>
-              );
-            }
-
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                style={styles.tab}
-                onPress={() => handleTabPress(tab.id)}
-              >
-                <View style={[styles.iconWrap, isActive && { backgroundColor: colors.accentBg }]}>
-                  <Icon
-                    size={22}
-                    color={isActive ? colors.accent : colors.textMuted}
-                    strokeWidth={isActive ? 2.5 : 1.8}
-                  />
-                </View>
-                <Text style={[styles.label, {
-                  color: isActive ? colors.accent : colors.textMuted,
-                  fontWeight: isActive ? '600' : '400',
-                }]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {renderTabs()}
         </View>
       )}
     </Animated.View>

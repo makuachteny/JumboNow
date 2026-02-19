@@ -52,12 +52,12 @@ const EVENT_ICONS = [
 
 const GRADIENT_PRESETS = [
   { colors: ['#6AADE4', '#418FDE', '#3579C6'], primary: '#6AADE4' },
-  { colors: ['#EC4899', '#F43F5E', '#DC2626'], primary: '#EC4899' },
-  { colors: ['#A78BFA', '#8B5CF6', '#D946EF'], primary: '#A78BFA' },
+  { colors: ['#5B9BD5', '#418FDE', '#3579C6'], primary: '#5B9BD5' },
+  { colors: ['#7EC4F0', '#6AADE4', '#418FDE'], primary: '#7EC4F0' },
   { colors: ['#34D399', '#10B981', '#059669'], primary: '#34D399' },
   { colors: ['#FACC15', '#F59E0B', '#D97706'], primary: '#FACC15' },
   { colors: ['#F97316', '#EA580C', '#C2410C'], primary: '#F97316' },
-  { colors: ['#EF4444', '#DC2626', '#B91C1C'], primary: '#EF4444' },
+  { colors: ['#2B6CB0', '#1E5A9E', '#163D6B'], primary: '#2B6CB0' },
   { colors: ['#6366F1', '#4F46E5', '#4338CA'], primary: '#6366F1' },
 ];
 
@@ -779,9 +779,9 @@ const createStyles = (colors) => StyleSheet.create({
   toggleText: { color: colors.textTertiary, fontSize: 14, fontWeight: '700' },
   toggleTextActive: { color: colors.accent },
   hintText: { color: colors.textMuted, fontSize: 11, marginBottom: 8 },
-  visibilityInfo: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, backgroundColor: 'rgba(139,92,246,0.1)', borderWidth: 1, borderColor: 'rgba(139,92,246,0.2)', marginTop: 12, marginBottom: 4 },
+  visibilityInfo: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, backgroundColor: colors.accent + '18', borderWidth: 1, borderColor: colors.accentBorder, marginTop: 12, marginBottom: 4 },
   visibilityInfoIcon: { fontSize: 16 },
-  visibilityInfoText: { color: '#8B5CF6', fontSize: 12, fontWeight: '600', flex: 1 },
+  visibilityInfoText: { color: colors.accent, fontSize: 12, fontWeight: '600', flex: 1 },
   ticketTypeRow: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 6, borderRadius: 12, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
   ticketTypeName: { color: colors.text, fontSize: 14, fontWeight: '700' },
   ticketTypeMeta: { color: colors.textTertiary, fontSize: 12, marginTop: 2 },
@@ -794,9 +794,9 @@ const createStyles = (colors) => StyleSheet.create({
   tagChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
   tagChipText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
   featuredToggle: { alignItems: 'center', paddingVertical: 14, borderRadius: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, marginTop: 20 },
-  featuredToggleActive: { backgroundColor: 'rgba(250,204,21,0.1)', borderColor: 'rgba(250,204,21,0.3)' },
+  featuredToggleActive: { backgroundColor: colors.warning + '18', borderColor: colors.warning + '40' },
   featuredToggleText: { color: colors.textTertiary, fontSize: 14, fontWeight: '700' },
-  featuredToggleTextActive: { color: '#FACC15' },
+  featuredToggleTextActive: { color: colors.warning },
   createButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 18, borderRadius: 16, backgroundColor: colors.buttonPrimary, marginTop: 20 },
   createButtonText: { color: '#FFF', fontSize: 17, fontWeight: '900' },
 });

@@ -55,10 +55,10 @@ const MEAL_EMOJI = {
 const MEAL_GRADIENT = {
   breakfast: ['#F59E0B', '#D97706'],
   lunch: ['#22C55E', '#16A34A'],
-  dinner: ['#8B5CF6', '#7C3AED'],
-  'late-night': ['#6366F1', '#4F46E5'],
+  dinner: ['#3579C6', '#2B6CB0'],
+  'late-night': ['#1E5A9E', '#163D6B'],
   daily: ['#0EA5E9', '#0284C7'],
-  brunch: ['#F472B6', '#EC4899'],
+  brunch: ['#6AADE4', '#418FDE'],
 };
 
 // Diet icon helper
@@ -67,7 +67,7 @@ const DIET_ICONS = {
   vegan: { label: 'VG', color: '#16A34A', bg: '#16A34A18' },
   'gluten-free': { label: 'GF', color: '#F59E0B', bg: '#F59E0B18' },
   halal: { label: 'H', color: '#0EA5E9', bg: '#0EA5E918' },
-  kosher: { label: 'K', color: '#8B5CF6', bg: '#8B5CF618' },
+  kosher: { label: 'K', color: '#3579C6', bg: '#3579C618' },
 };
 
 export default function DiningMenuScreen({ navigation, route }) {

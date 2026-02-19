@@ -126,7 +126,7 @@ export default function OnboardingScreen({ navigation }) {
       return (
         <View style={styles.stepContainer}>
           <View style={styles.stepIconWrap}>
-            <Heart size={40} color="#EC4899" />
+            <Heart size={40} color="#6AADE4" />
           </View>
           <Text style={styles.stepTitle}>What are you into?</Text>
           <Text style={styles.stepSubtitle}>Select your interests and we'll show you relevant events.</Text>

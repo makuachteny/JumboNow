@@ -82,11 +82,11 @@ const MAP_LOCATION_CATEGORIES = LOCATION_CATEGORIES.map((cat) => ({
 
 const getCategoryColor = (category) => {
   switch (category) {
-    case 'library': return '#8B5CF6';
+    case 'library': return '#3579C6';
     case 'dining': return '#F59E0B';
     case 'academic': return '#3B82F6';
     case 'athletic': return '#22C55E';
-    case 'residential': return '#EC4899';
+    case 'residential': return '#6AADE4';
     default: return '#418FDE';
   }
 };
@@ -1243,8 +1243,8 @@ export default function MapScreen({ navigation, route }) {
               <Text style={styles.dirModeLabel}>Drive</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dirModeBtn} onPress={() => openDirections('bicycling')}>
-              <View style={[styles.dirModeIcon, { backgroundColor: '#EC489915' }]}>
-                <Bike size={22} color="#EC4899" />
+              <View style={[styles.dirModeIcon, { backgroundColor: '#6AADE415' }]}>
+                <Bike size={22} color="#6AADE4" />
               </View>
               <Text style={styles.dirModeLabel}>Bike</Text>
             </TouchableOpacity>

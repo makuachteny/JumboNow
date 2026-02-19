@@ -16,6 +16,7 @@ import {
   Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Search,
   UserPlus,
@@ -72,7 +73,8 @@ export default function FriendsScreen({ navigation }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const [viewMode, setViewMode] = useState('messages'); // 'messages' | 'add'
+  const [viewMode, setViewMode] = useState('messages');
+  const [chatTab, setChatTab] = useState('new'); // 'new' | 'best'
   const [searchQuery, setSearchQuery] = useState('');
   const [friends, setFriends] = useState([]);
   const [conversations, setConversations] = useState([]);
@@ -89,7 +91,7 @@ export default function FriendsScreen({ navigation }) {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
-  const [addActiveTab, setAddActiveTab] = useState('requests'); // 'requests' | 'discover'
+  const [addActiveTab, setAddActiveTab] = useState('requests');
   const fadeIn = useRef(new Animated.Value(0)).current;
 
   const mapProfile = (p) => ({
@@ -139,7 +141,6 @@ export default function FriendsScreen({ navigation }) {
     };
   }, [fetchData]);
 
-  // Fetch all non-friend users when Discover tab is active
   useEffect(() => {
     if (viewMode !== 'add' || addActiveTab !== 'discover') return;
     let cancelled = false;
@@ -164,7 +165,6 @@ export default function FriendsScreen({ navigation }) {
     setRefreshing(false);
   }, [fetchData]);
 
-  // Unified chat list: active chats on top, then friends without convos, then groups
   const unifiedChatList = useMemo(() => {
     const q = searchQuery.toLowerCase();
 
@@ -180,10 +180,10 @@ export default function FriendsScreen({ navigation }) {
         lastMessage: c.lastMessage,
         lastMessageAt: c.lastMessageAt,
         otherUser: c.otherUser,
+        unread: c.unread || false,
       };
     });
 
-    // Friends without a conversation yet
     const friendDms = friends
       .filter((f) => !dmFriendIds.has(f.id))
       .map((f) => ({
@@ -195,6 +195,7 @@ export default function FriendsScreen({ navigation }) {
         lastMessage: 'Tap to start chatting',
         lastMessageAt: null,
         otherUser: f,
+        unread: false,
       }));
 
     const grps = groupConversations.map((g) => ({
@@ -207,9 +208,9 @@ export default function FriendsScreen({ navigation }) {
       memberCount: g.memberCount,
       lastMessage: g.lastMessage,
       lastMessageAt: g.lastMessageAt,
+      unread: g.unread || false,
     }));
 
-    // Active chats first (by time), then no-convo friends (alphabetical)
     let combined = [...dms, ...grps, ...friendDms].sort((a, b) => {
       if (a.lastMessageAt && b.lastMessageAt) return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
       if (a.lastMessageAt && !b.lastMessageAt) return -1;
@@ -222,6 +223,11 @@ export default function FriendsScreen({ navigation }) {
     }
     return combined;
   }, [conversations, groupConversations, friends, searchQuery, viewMode]);
+
+  // "Best of JumboNow" = suggested friends for conversation
+  const bestOfList = useMemo(() => {
+    return suggested.slice(0, 10);
+  }, [suggested]);
 
   const handleAddFriend = async (user) => {
     try {
@@ -306,18 +312,22 @@ export default function FriendsScreen({ navigation }) {
           </View>
           <View style={styles.chatContent}>
             <View style={styles.chatTopRow}>
-              <Text style={styles.chatName} numberOfLines={1}>{item.name}</Text>
-              <Text style={styles.chatTime}>{formatTimestamp(item.lastMessageAt)}</Text>
+              <Text style={[styles.chatName, item.unread && styles.chatNameUnread]} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <Text style={[styles.chatTime, item.unread && styles.chatTimeUnread]}>
+                {formatTimestamp(item.lastMessageAt)}
+              </Text>
             </View>
-            <Text style={styles.chatPreview} numberOfLines={1}>
+            <Text style={[styles.chatPreview, item.unread && styles.chatPreviewUnread]} numberOfLines={1}>
               {item.lastMessage || 'Tap to start chatting...'}
             </Text>
           </View>
+          {item.unread && <View style={styles.unreadDot} />}
         </TouchableOpacity>
       );
     }
 
-    // Group
     return (
       <TouchableOpacity
         style={styles.chatCard}
@@ -336,120 +346,188 @@ export default function FriendsScreen({ navigation }) {
         </View>
         <View style={styles.chatContent}>
           <View style={styles.chatTopRow}>
-            <Text style={styles.chatName} numberOfLines={1}>
+            <Text style={[styles.chatName, item.unread && styles.chatNameUnread]} numberOfLines={1}>
               {item.name} <Text style={styles.memberCountLabel}>({item.memberCount})</Text>
             </Text>
-            <Text style={styles.chatTime}>{formatTimestamp(item.lastMessageAt)}</Text>
+            <Text style={[styles.chatTime, item.unread && styles.chatTimeUnread]}>
+              {formatTimestamp(item.lastMessageAt)}
+            </Text>
           </View>
-          <Text style={styles.chatPreview} numberOfLines={1}>
+          <Text style={[styles.chatPreview, item.unread && styles.chatPreviewUnread]} numberOfLines={1}>
             {item.lastMessage || 'No messages yet'}
           </Text>
         </View>
+        {item.unread && <View style={styles.unreadDot} />}
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle={colors.statusBarStyle} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>friends</Text>
-        {viewMode === 'messages' ? (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => { setViewMode('add'); setSearchQuery(''); }}
-            accessibilityLabel="Add friends"
-            accessibilityRole="button"
-          >
-            <UserPlus size={16} color={colors.text} strokeWidth={2.5} />
-            <Text style={styles.addButtonText}>ADD</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => { setViewMode('messages'); setSearchQuery(''); }}
-            accessibilityLabel="Done adding friends"
-            accessibilityRole="button"
-          >
-            <Text style={styles.addButtonText}>DONE</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Purple Gradient Header */}
+      <LinearGradient
+        colors={colors.purpleGradient}
+        style={[styles.header, { paddingTop: insets.top + 10 }]}
+      >
+        <View style={styles.headerRow}>
+          <Text style={styles.headerTitle}>Conversations</Text>
+          <View style={styles.headerActions}>
+            {viewMode === 'messages' ? (
+              <TouchableOpacity
+                style={styles.headerAddBtn}
+                onPress={() => { setViewMode('add'); setSearchQuery(''); }}
+                accessibilityLabel="Add friends"
+                accessibilityRole="button"
+              >
+                <Plus size={20} color="#FFF" strokeWidth={2.5} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.headerAddBtn}
+                onPress={() => { setViewMode('messages'); setSearchQuery(''); }}
+                accessibilityLabel="Done adding friends"
+                accessibilityRole="button"
+              >
+                <X size={20} color="#FFF" strokeWidth={2.5} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <Search size={18} color={colors.accentMuted} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={viewMode === 'messages' ? 'Search chats' : 'Search for friends'}
-          placeholderTextColor={colors.accentMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Text style={{ color: colors.accent, fontSize: 16 }}>{'\u2715'}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* Search bar inside gradient */}
+        <View style={styles.searchContainer}>
+          <Search size={18} color="rgba(255,255,255,0.5)" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={viewMode === 'messages' ? 'Search chats' : 'Search for friends'}
+            placeholderTextColor="rgba(255,255,255,0.45)"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Text style={{ color: '#FFF', fontSize: 16 }}>{'\u2715'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </LinearGradient>
 
       {/* ===== MESSAGES VIEW ===== */}
       {viewMode === 'messages' && (
         <>
-          {/* Create Group button */}
-          <TouchableOpacity
-            style={styles.createGroupBtn}
-            onPress={() => setShowCreateGroup(true)}
-          >
-            <View style={styles.createGroupIcon}>
-              <Plus size={22} color={colors.accent} strokeWidth={2.5} />
-            </View>
-            <Text style={styles.createGroupText}>Create Group</Text>
-          </TouchableOpacity>
+          {/* Filter Tabs: New / Best of JumboNow */}
+          <View style={styles.chatTabsRow}>
+            <TouchableOpacity
+              style={[styles.chatTabPill, chatTab === 'new' && styles.chatTabPillActive]}
+              onPress={() => setChatTab('new')}
+            >
+              <Text style={[styles.chatTabText, chatTab === 'new' && styles.chatTabTextActive]}>New</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.chatTabPill, chatTab === 'best' && styles.chatTabPillActive]}
+              onPress={() => setChatTab('best')}
+            >
+              <Text style={[styles.chatTabText, chatTab === 'best' && styles.chatTabTextActive]}>Best of JumboNow</Text>
+            </TouchableOpacity>
+          </View>
 
-          <FlatList
-            data={unifiedChatList}
-            keyExtractor={(item) => `${item.type}-${item.id}`}
-            renderItem={renderChatItem}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: insets.bottom + 90 },
-              unifiedChatList.length === 0 && styles.listContentEmpty,
-            ]}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
-            }
-            ListEmptyComponent={
-              loading ? (
-                <View style={styles.emptyState}>
-                  <ActivityIndicator size="large" color={colors.accent} />
+          {chatTab === 'new' ? (
+            <>
+              {/* Create Group button */}
+              <TouchableOpacity
+                style={styles.createGroupBtn}
+                onPress={() => setShowCreateGroup(true)}
+              >
+                <View style={styles.createGroupIcon}>
+                  <Plus size={22} color={colors.accent} strokeWidth={2.5} />
                 </View>
+                <Text style={styles.createGroupText}>Create Group</Text>
+              </TouchableOpacity>
+
+              <FlatList
+                data={unifiedChatList}
+                keyExtractor={(item) => `${item.type}-${item.id}`}
+                renderItem={renderChatItem}
+                contentContainerStyle={[
+                  styles.listContent,
+                  { paddingBottom: insets.bottom + 90 },
+                  unifiedChatList.length === 0 && styles.listContentEmpty,
+                ]}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+                }
+                ListEmptyComponent={
+                  loading ? (
+                    <View style={styles.emptyState}>
+                      <ActivityIndicator size="large" color={colors.accent} />
+                    </View>
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Users size={40} color={colors.accentMuted} />
+                      <Text style={styles.emptyTitle}>No friends yet</Text>
+                      <Text style={styles.emptySubtext}>Add friends to start chatting!</Text>
+                      <TouchableOpacity
+                        style={styles.emptyActionBtn}
+                        onPress={() => { setViewMode('add'); setSearchQuery(''); }}
+                      >
+                        <Text style={styles.emptyActionBtnText}>Find Friends</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )
+                }
+              />
+            </>
+          ) : (
+            /* Best of JumboNow tab — suggested people */
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 90, paddingHorizontal: 16, paddingTop: 8 }}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+              }
+            >
+              {bestOfList.length > 0 ? (
+                bestOfList.map((person) => (
+                  <View key={person.id} style={styles.friendCard}>
+                    <View style={[styles.friendAvatar, { backgroundColor: person.avatarColor }]}>
+                      <Text style={styles.friendAvatarText}>{person.avatar}</Text>
+                    </View>
+                    <View style={styles.friendInfo}>
+                      <View style={styles.friendNameRow}>
+                        <Text style={styles.friendName}>{person.name}</Text>
+                        {person.verified && (
+                          <View style={styles.verifiedBadge}>
+                            <Text style={styles.verifiedText}>{'\u2713'}</Text>
+                          </View>
+                        )}
+                        <Text style={styles.friendYear}>{person.year}</Text>
+                      </View>
+                      <Text style={styles.friendUsername}>@{person.username}</Text>
+                    </View>
+                    <TouchableOpacity style={styles.addFriendBtn} onPress={() => handleAddFriend(person)}>
+                      <Text style={styles.addFriendBtnText}>ADD</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
               ) : (
                 <View style={styles.emptyState}>
                   <Users size={40} color={colors.accentMuted} />
-                  <Text style={styles.emptyTitle}>No friends yet</Text>
-                  <Text style={styles.emptySubtext}>Add friends to start chatting!</Text>
-                  <TouchableOpacity
-                    style={styles.emptyActionBtn}
-                    onPress={() => { setViewMode('add'); setSearchQuery(''); }}
-                  >
-                    <Text style={styles.emptyActionBtnText}>Find Friends</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.emptyTitle}>No suggestions yet</Text>
+                  <Text style={styles.emptySubtext}>Check back later for people to connect with!</Text>
                 </View>
-              )
-            }
-          />
+              )}
+            </ScrollView>
+          )}
         </>
       )}
 
       {/* ===== ADD VIEW ===== */}
       {viewMode === 'add' && (
         <>
-          {/* Sub-tabs: Requests | Discover */}
           <View style={styles.tabsRow}>
             <TouchableOpacity
               style={[styles.tab, addActiveTab === 'requests' && styles.tabActive]}
@@ -479,10 +557,8 @@ export default function FriendsScreen({ navigation }) {
             }
           >
             <Animated.View style={{ opacity: fadeIn }}>
-              {/* REQUESTS TAB */}
               {addActiveTab === 'requests' && (
                 <View style={styles.listSection}>
-                  {/* Invite Friend Link */}
                   <TouchableOpacity style={styles.inviteRow} onPress={handleInviteLink}>
                     <View style={styles.inviteDashedCircle}>
                       <Link2 size={20} color={colors.accent} />
@@ -519,7 +595,7 @@ export default function FriendsScreen({ navigation }) {
                           {request.bio ? <Text style={styles.friendBio}>{request.bio}</Text> : null}
                           <View style={styles.requestActions}>
                             <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAcceptRequest(request)}>
-                              <UserCheck size={16} color={colors.text} />
+                              <UserCheck size={16} color="#FFF" />
                               <Text style={styles.acceptBtnText}>Accept</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.declineBtn} onPress={() => handleDeclineRequest(request)}>
@@ -534,7 +610,6 @@ export default function FriendsScreen({ navigation }) {
                 </View>
               )}
 
-              {/* DISCOVER TAB */}
               {addActiveTab === 'discover' && (
                 <View style={styles.listSection}>
                   {discoverLoading ? (
@@ -651,57 +726,84 @@ const createStyles = (colors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+
+  // -- Purple Gradient Header --
   header: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
+    marginBottom: 14,
   },
   headerTitle: {
-    color: colors.text,
-    fontSize: 32,
+    color: '#FFF',
+    fontSize: 30,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
-  addButton: {
+  headerActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    gap: 10,
   },
-  addButtonText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '800',
+  headerAddBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginHorizontal: 16,
-    marginBottom: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    paddingVertical: 11,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
   searchInput: {
     flex: 1,
-    color: colors.text,
+    color: '#FFF',
     fontSize: 14,
     fontWeight: '500',
   },
 
-  // Create group button in messages view
+  // -- Chat Filter Tabs --
+  chatTabsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 10,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  chatTabPill: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  chatTabPillActive: {
+    backgroundColor: colors.purpleBg,
+    borderColor: colors.purpleBorder,
+  },
+  chatTabText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  chatTabTextActive: {
+    color: colors.purple,
+  },
+
+  // Create group button
   createGroupBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -715,9 +817,9 @@ const createStyles = (colors) => StyleSheet.create({
     borderColor: colors.cardBorder,
   },
   createGroupIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.accentBg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -728,7 +830,7 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Chat list
+  // -- Chat list --
   listContent: { paddingHorizontal: 16, paddingTop: 4 },
   listContentEmpty: { flexGrow: 1 },
   chatCard: {
@@ -737,16 +839,13 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 14,
     paddingVertical: 14,
     paddingHorizontal: 14,
-    marginBottom: 6,
+    marginBottom: 4,
     borderRadius: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
   },
   chatAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -756,8 +855,8 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '800',
   },
   groupAvatarSquare: {
-    width: 50,
-    height: 50,
+    width: 52,
+    height: 52,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -777,9 +876,13 @@ const createStyles = (colors) => StyleSheet.create({
   chatName: {
     color: colors.text,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     flex: 1,
     marginRight: 8,
+  },
+  chatNameUnread: {
+    fontWeight: '800',
+    color: colors.text,
   },
   memberCountLabel: {
     color: colors.textTertiary,
@@ -787,20 +890,35 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '500',
   },
   chatTime: {
-    color: colors.accentMuted,
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: '500',
+  },
+  chatTimeUnread: {
+    color: colors.purple,
+    fontWeight: '700',
   },
   chatPreview: {
     color: colors.textMuted,
     fontSize: 13,
   },
+  chatPreviewUnread: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.purple,
+  },
 
-  // Tabs for add mode
+  // -- Tabs for add mode --
   tabsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 8,
+    marginTop: 12,
     marginBottom: 8,
   },
   tab: {
@@ -816,11 +934,11 @@ const createStyles = (colors) => StyleSheet.create({
     borderColor: colors.cardBorder,
   },
   tabActive: {
-    backgroundColor: colors.accentBorder,
+    backgroundColor: colors.accentBg,
     borderColor: colors.accentBorder,
   },
   tabText: {
-    color: colors.accentMuted,
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -846,7 +964,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingTop: 8,
   },
 
-  // Invite row
+  // -- Invite row --
   inviteRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -879,7 +997,7 @@ const createStyles = (colors) => StyleSheet.create({
     marginTop: 2,
   },
 
-  // Friend cards
+  // -- Friend cards --
   friendCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -914,9 +1032,7 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
-  friendInfo: {
-    flex: 1,
-  },
+  friendInfo: { flex: 1 },
   friendNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -955,8 +1071,6 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 12,
     marginBottom: 2,
   },
-
-  // ADD friend button
   addFriendBtn: {
     paddingHorizontal: 18,
     paddingVertical: 8,
@@ -969,7 +1083,7 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Request actions
+  // -- Request actions --
   requestActions: {
     flexDirection: 'row',
     gap: 8,
@@ -985,7 +1099,7 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.buttonPrimary,
   },
   acceptBtnText: {
-    color: colors.text,
+    color: '#FFF',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1015,59 +1129,8 @@ const createStyles = (colors) => StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 12,
   },
-  suggestedRow: {
-    paddingRight: 16,
-    gap: 10,
-  },
-  suggestedCard: {
-    width: 150,
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    alignItems: 'center',
-    gap: 8,
-  },
-  suggestedAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  suggestedAvatarText: {
-    color: '#FFF',
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  suggestedName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  suggestedMutual: {
-    color: colors.textMuted,
-    fontSize: 11,
-    textAlign: 'center',
-  },
-  suggestedAddBtn: {
-    width: '100%',
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.text,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  suggestedAddBtnText: {
-    color: colors.background,
-    fontSize: 13,
-    fontWeight: '800',
-  },
 
-  // Empty state
+  // -- Empty state --
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1098,7 +1161,7 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Modal
+  // -- Modal --
   modalOverlay: {
     flex: 1,
     backgroundColor: colors.overlay,

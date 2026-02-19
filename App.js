@@ -31,6 +31,8 @@ const DiningScreen = lazy(() => import('./src/screens/DiningScreen'));
 const DiningMenuScreen = lazy(() => import('./src/screens/DiningMenuScreen'));
 const CampusResourcesScreen = lazy(() => import('./src/screens/CampusResourcesScreen'));
 const GroupChatScreen = lazy(() => import('./src/screens/GroupChatScreen'));
+const ClubsScreen = lazy(() => import('./src/screens/ClubsScreen'));
+const CustomizationScreen = lazy(() => import('./src/screens/CustomizationScreen'));
 const FreeFoodBanner = lazy(() => import('./src/components/FreeFoodBanner'));
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 
@@ -60,7 +62,7 @@ const linking = {
       EventDetail: 'event/:eventId',
       Profile: 'profile',
       Home: 'home',
-      Friends: 'friends',
+      Friends: 'conversations',
       MyTickets: 'tickets',
       Map: 'map',
       FreeFood: 'freefood',
@@ -182,6 +184,8 @@ function AppNavigator() {
         <Stack.Screen name="DiningMenu" component={withSuspense(DiningMenuScreen)} />
         <Stack.Screen name="CampusResources" component={withSuspense(CampusResourcesScreen)} />
         <Stack.Screen name="GroupChat" component={withSuspense(GroupChatScreen)} />
+        <Stack.Screen name="Clubs" component={withSuspense(ClubsScreen)} />
+        <Stack.Screen name="Customization" component={withSuspense(CustomizationScreen)} />
       </Stack.Navigator>
       {session && (
         <Suspense fallback={null}>

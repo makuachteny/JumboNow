@@ -2,11 +2,9 @@ import { supabase } from '../config/supabase';
 
 function generateConfirmationCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
   let result = '';
   for (let i = 0; i < 8; i++) {
-    result += chars.charAt(bytes[i] % chars.length);
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
 }

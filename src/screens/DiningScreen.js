@@ -33,7 +33,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const MEAL_CONFIG = {
   breakfast: { label: 'Breakfast', emoji: '\u{1F373}', gradient: ['#F59E0B', '#D97706'] },
   lunch: { label: 'Lunch', emoji: '\u{1F96A}', gradient: ['#22C55E', '#16A34A'] },
-  dinner: { label: 'Dinner', emoji: '\u{1F35D}', gradient: ['#8B5CF6', '#7C3AED'] },
+  dinner: { label: 'Dinner', emoji: '\u{1F35D}', gradient: ['#3579C6', '#2B6CB0'] },
   'late-night': { label: 'Late Night', emoji: '\u{1F319}', gradient: ['#6366F1', '#4F46E5'] },
 };
 
@@ -45,15 +45,15 @@ const TYPE_ICON = {
 
 const LOCATION_GRADIENTS = [
   ['#FF6B6B', '#EE5A24'],
-  ['#6C5CE7', '#A29BFE'],
+  ['#418FDE', '#6AADE4'],
   ['#00B894', '#00CEC9'],
   ['#FDCB6E', '#F39C12'],
   ['#E17055', '#D63031'],
   ['#0984E3', '#74B9FF'],
-  ['#6D214F', '#B33771'],
+  ['#2B6CB0', '#3579C6'],
   ['#1B9CFC', '#25CCF7'],
   ['#55A3A4', '#60A3BC'],
-  ['#FC427B', '#EE5A80'],
+  ['#1E5A9E', '#3579C6'],
   ['#2C3A47', '#596275'],
 ];
 

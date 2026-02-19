@@ -12,6 +12,7 @@ import {
   Share,
   Image,
   Linking,
+  TextInput,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +35,7 @@ import {
   CalendarPlus,
   MessageCircle,
   ChevronRight,
+  Heart,
 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { eventsService } from '../services/events.service';
@@ -95,6 +97,47 @@ export default function EventDetailScreen({ route, navigation }) {
   const [chatPickerGroups, setChatPickerGroups] = useState([]);
   const [chatPickerLoading, setChatPickerLoading] = useState(false);
   const [sharedToIds, setSharedToIds] = useState(new Set());
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [interestedUsers, setInterestedUsers] = useState([]);
+  const [interestedLoading, setInterestedLoading] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  const fetchComments = useCallback(async () => {
+    setCommentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('event_comments')
+        .select('*, profile:profiles!event_comments_user_id_fkey(id, username, display_name, avatar_url, avatar_color)')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      if (!error && data) setComments(data);
+    } catch {
+      // Table may not exist yet
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [eventId]);
+
+  const fetchInterestedUsers = useCallback(async () => {
+    setInterestedLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('event_attendees')
+        .select('*, profile:profiles!event_attendees_user_id_fkey(id, username, display_name, avatar_url, avatar_color)')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (!error && data) setInterestedUsers(data);
+    } catch {
+      setInterestedUsers([]);
+    } finally {
+      setInterestedLoading(false);
+    }
+  }, [eventId]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,14 +148,16 @@ export default function EventDetailScreen({ route, navigation }) {
       ]);
       setEvent(eventData);
       setReservation(reservationData);
-      if (user && eventData && user.id === eventData.created_by) {
-        setIsCreator(true);
-        // Load attendees for the event creator
-        setAttendeesLoading(true);
-        ticketsService.getEventAttendees(eventId)
-          .then((data) => setAttendees(data))
-          .catch(() => setAttendees([]))
-          .finally(() => setAttendeesLoading(false));
+      if (user) {
+        setCurrentUserId(user.id);
+        if (eventData && user.id === eventData.created_by) {
+          setIsCreator(true);
+          setAttendeesLoading(true);
+          ticketsService.getEventAttendees(eventId)
+            .then((data) => setAttendees(data))
+            .catch(() => setAttendees([]))
+            .finally(() => setAttendeesLoading(false));
+        }
       }
     } catch (err) {
       setEvent(null);
@@ -123,7 +168,9 @@ export default function EventDetailScreen({ route, navigation }) {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchComments();
+    fetchInterestedUsers();
+  }, [fetchData, fetchComments, fetchInterestedUsers]);
 
   const handleReserve = async () => {
     setReserving(true);
@@ -344,6 +391,58 @@ export default function EventDetailScreen({ route, navigation }) {
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to invite group.');
     }
+  };
+
+  const handleSubmitComment = async () => {
+    const text = newComment.trim();
+    if (!text || submittingComment) return;
+    setSubmittingComment(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { data, error } = await supabase
+        .from('event_comments')
+        .insert({ event_id: eventId, user_id: user.id, content: text })
+        .select('*, profile:profiles!event_comments_user_id_fkey(id, username, display_name, avatar_url, avatar_color)')
+        .single();
+      if (error) throw error;
+      setComments((prev) => [...prev, data]);
+      setNewComment('');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to post comment.');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = (commentId) => {
+    Alert.alert('Delete Comment', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await supabase.from('event_comments').delete().eq('id', commentId);
+            setComments((prev) => prev.filter((c) => c.id !== commentId));
+          } catch {}
+        },
+      },
+    ]);
+  };
+
+  const getTimeAgo = (dateStr) => {
+    const now = new Date();
+    const date = new Date(dateStr);
+    const diffMs = now - date;
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDays = Math.floor(diffHr / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   if (loading) {
@@ -608,6 +707,126 @@ export default function EventDetailScreen({ route, navigation }) {
         <View style={styles.descriptionSection}>
           <Text style={styles.sectionTitle}>About</Text>
           <Text style={styles.description}>{event.description}</Text>
+        </View>
+
+        {/* People Interested */}
+        <View style={styles.interestedSection}>
+          <View style={styles.interestedHeader}>
+            <Heart size={18} color={colors.accent} />
+            <Text style={styles.sectionTitle}>
+              {interestedUsers.length > 0 ? `${interestedUsers.length} People Interested` : 'People Interested'}
+            </Text>
+          </View>
+          {interestedLoading ? (
+            <ActivityIndicator size="small" color={colors.accent} style={{ paddingVertical: 16 }} />
+          ) : interestedUsers.length === 0 ? (
+            <Text style={styles.interestedEmpty}>Be the first to show interest!</Text>
+          ) : (
+            <>
+              <View style={styles.interestedAvatarRow}>
+                {interestedUsers.slice(0, 8).map((item) => {
+                  const p = item.profile;
+                  const initials = (p?.display_name || p?.username || '?').slice(0, 2).toUpperCase();
+                  return p?.avatar_url ? (
+                    <Image key={item.id} source={{ uri: p.avatar_url }} style={styles.interestedAvatar} />
+                  ) : (
+                    <View key={item.id} style={[styles.interestedAvatarFallback, { backgroundColor: p?.avatar_color || '#6AADE4' }]}>
+                      <Text style={styles.interestedAvatarText}>{initials}</Text>
+                    </View>
+                  );
+                })}
+                {interestedUsers.length > 8 && (
+                  <View style={[styles.interestedAvatarFallback, { backgroundColor: colors.accentBg }]}>
+                    <Text style={[styles.interestedAvatarText, { color: colors.accent }]}>+{interestedUsers.length - 8}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.interestedNamesList}>
+                {interestedUsers.slice(0, 5).map((item, idx) => {
+                  const p = item.profile;
+                  const name = p?.display_name || p?.username || 'Someone';
+                  return (
+                    <Text key={item.id} style={styles.interestedName}>
+                      {name}{idx < Math.min(interestedUsers.length, 5) - 1 ? ', ' : ''}
+                    </Text>
+                  );
+                })}
+                {interestedUsers.length > 5 && (
+                  <Text style={styles.interestedMore}> and {interestedUsers.length - 5} more</Text>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Comments */}
+        <View style={styles.commentsSection}>
+          <View style={styles.commentsHeader}>
+            <MessageCircle size={18} color={colors.accent} />
+            <Text style={styles.sectionTitle}>
+              Comments{comments.length > 0 ? ` (${comments.length})` : ''}
+            </Text>
+          </View>
+
+          {commentsLoading ? (
+            <ActivityIndicator size="small" color={colors.accent} style={{ paddingVertical: 16 }} />
+          ) : comments.length === 0 ? (
+            <Text style={styles.commentsEmpty}>No comments yet. Be the first to comment!</Text>
+          ) : (
+            comments.map((comment) => {
+              const p = comment.profile;
+              const name = p?.display_name || p?.username || 'Unknown';
+              const initials = name.slice(0, 2).toUpperCase();
+              const isOwn = currentUserId && comment.user_id === currentUserId;
+              return (
+                <View key={comment.id} style={styles.commentRow}>
+                  {p?.avatar_url ? (
+                    <Image source={{ uri: p.avatar_url }} style={styles.commentAvatar} />
+                  ) : (
+                    <View style={[styles.commentAvatarFallback, { backgroundColor: p?.avatar_color || '#6AADE4' }]}>
+                      <Text style={styles.commentAvatarText}>{initials}</Text>
+                    </View>
+                  )}
+                  <View style={styles.commentContent}>
+                    <View style={styles.commentMeta}>
+                      <Text style={styles.commentName}>{name}</Text>
+                      <Text style={styles.commentTime}>{getTimeAgo(comment.created_at)}</Text>
+                      {isOwn && (
+                        <TouchableOpacity onPress={() => handleDeleteComment(comment.id)} style={styles.commentDeleteBtn}>
+                          <X size={12} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <Text style={styles.commentText}>{comment.content}</Text>
+                  </View>
+                </View>
+              );
+            })
+          )}
+
+          {/* Comment Input */}
+          <View style={styles.commentInputRow}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Add a comment..."
+              placeholderTextColor={colors.placeholder}
+              value={newComment}
+              onChangeText={setNewComment}
+              maxLength={500}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.commentSendBtn, (!newComment.trim() || submittingComment) && { opacity: 0.4 }]}
+              onPress={handleSubmitComment}
+              disabled={!newComment.trim() || submittingComment}
+            >
+              {submittingComment ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Send size={16} color="#FFF" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Invite Friends Button */}
@@ -1073,7 +1292,7 @@ const createStyles = (colors) => StyleSheet.create({
   heroButton: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   heroIcon: { fontSize: 48, marginBottom: 8 },
   heroSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600', marginBottom: 4 },
-  heroTitle: { color: '#FFF', fontSize: 26, fontWeight: '900', marginBottom: 12 },
+  heroTitle: { color: '#FFF', fontSize: 28, fontWeight: '800', marginBottom: 12 },
   heroBadgeRow: { flexDirection: 'row', gap: 8 },
   priceBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)' },
   freeBadge: { backgroundColor: 'rgba(34,197,94,0.3)' },
@@ -1081,14 +1300,14 @@ const createStyles = (colors) => StyleSheet.create({
   priceBadgeText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
   featuredBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(250,204,21,0.3)' },
   featuredBadgeText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
-  friendsOnlyBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(139,92,246,0.3)' },
+  friendsOnlyBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(53,121,198,0.3)' },
   friendsOnlyBadgeText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   accountTypeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
   accountTypeBadgeText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
   organizerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, marginHorizontal: 16, marginTop: -16, borderRadius: 18, backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder },
   organizerAvatar: { width: 50, height: 50, borderRadius: 16, backgroundColor: colors.accentBg, alignItems: 'center', justifyContent: 'center' },
   organizerAvatarText: { fontSize: 22 },
-  organizerName: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  organizerName: { color: colors.text, fontSize: 16, fontWeight: '800' },
   organizerType: { color: colors.textTertiary, fontSize: 12, fontWeight: '500', marginTop: 2 },
   reportButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.inputBg, alignItems: 'center', justifyContent: 'center' },
   creatorActions: { flexDirection: 'row', gap: 10, marginHorizontal: 16, marginTop: 12 },
@@ -1111,7 +1330,7 @@ const createStyles = (colors) => StyleSheet.create({
   attendeeCode: { color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
   detailsSection: { padding: 16, gap: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  detailText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
+  detailText: { color: colors.textSecondary, fontSize: 15, fontWeight: '500' },
   addCalendarBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
   addCalendarText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
   tagsSection: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
@@ -1233,4 +1452,34 @@ const createStyles = (colors) => StyleSheet.create({
   shareSheetIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   shareSheetOptionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
   shareSheetOptionSub: { color: colors.textTertiary, fontSize: 12, marginTop: 2 },
+
+  // People Interested
+  interestedSection: { marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 18, backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder },
+  interestedHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  interestedEmpty: { color: colors.textMuted, fontSize: 14, fontWeight: '500', textAlign: 'center', paddingVertical: 12 },
+  interestedAvatarRow: { flexDirection: 'row', marginBottom: 10 },
+  interestedAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: -8, borderWidth: 2, borderColor: colors.background },
+  interestedAvatarFallback: { width: 40, height: 40, borderRadius: 20, marginRight: -8, borderWidth: 2, borderColor: colors.background, alignItems: 'center', justifyContent: 'center' },
+  interestedAvatarText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
+  interestedNamesList: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  interestedName: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  interestedMore: { color: colors.textTertiary, fontSize: 13, fontWeight: '500' },
+
+  // Comments
+  commentsSection: { marginHorizontal: 16, marginBottom: 20, padding: 16, borderRadius: 18, backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder },
+  commentsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  commentsEmpty: { color: colors.textMuted, fontSize: 14, fontWeight: '500', textAlign: 'center', paddingVertical: 12 },
+  commentRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  commentAvatar: { width: 34, height: 34, borderRadius: 17 },
+  commentAvatarFallback: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  commentAvatarText: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+  commentContent: { flex: 1 },
+  commentMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
+  commentName: { color: colors.text, fontSize: 13, fontWeight: '800' },
+  commentTime: { color: colors.textMuted, fontSize: 11, fontWeight: '500' },
+  commentDeleteBtn: { marginLeft: 'auto', padding: 4 },
+  commentText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 8, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.glassBorder },
+  commentInput: { flex: 1, minHeight: 38, maxHeight: 80, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.inputBorder, color: colors.text, fontSize: 14, fontWeight: '400' },
+  commentSendBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.buttonPrimary, alignItems: 'center', justifyContent: 'center' },
 });

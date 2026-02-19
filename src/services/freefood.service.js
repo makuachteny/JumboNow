@@ -5,11 +5,9 @@ const isSchemaError = (error) =>
 
 function generateConfirmationCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
   let result = 'JMB-';
   for (let i = 0; i < 4; i++) {
-    result += chars.charAt(bytes[i] % chars.length);
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
 }

@@ -145,17 +145,22 @@ export const chatService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return 0;
 
+    // First fetch conversation IDs the user belongs to
+    const { data: convos, error: convError } = await supabase
+      .from('conversations')
+      .select('id')
+      .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`);
+
+    if (convError || !convos || convos.length === 0) return 0;
+
+    const convoIds = convos.map(c => c.id);
+
     const { count, error } = await supabase
       .from('messages')
       .select('*', { count: 'exact', head: true })
       .neq('sender_id', user.id)
       .eq('read', false)
-      .in('conversation_id',
-        supabase
-          .from('conversations')
-          .select('id')
-          .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`)
-      );
+      .in('conversation_id', convoIds);
 
     if (error) return 0;
     return count || 0;

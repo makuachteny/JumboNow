@@ -52,15 +52,23 @@ const darkColors = {
 
   // Status
   error: '#EF4444',
-  success: '#34D399',
+  success: '#10B981',
   info: '#60A5FA',
-  warning: '#FACC15',
+  warning: '#D4A017',
 
   // Overlays
   overlay: 'rgba(4,8,16,0.92)',
   modalBg: 'rgba(6,13,23,0.97)',
   divider: 'rgba(106,173,228,0.06)',
   statusBarStyle: 'light-content',
+
+  // Secondary accent (Tufts palette)
+  purple: '#3579C6',
+  purpleLight: '#6AADE4',
+  purpleBg: 'rgba(53,121,198,0.12)',
+  purpleBorder: 'rgba(53,121,198,0.25)',
+  purpleGradient: ['#418FDE', '#3579C6', '#2B6CB0'],
+  gradientBar: ['#6AADE4', '#418FDE', '#3579C6', '#2B6CB0', '#1E5A9E', '#163D6B'],
 };
 
 const lightColors = {
@@ -99,6 +107,14 @@ const lightColors = {
   modalBg: 'rgba(232,244,253,0.95)',
   divider: 'rgba(65,143,222,0.10)',
   statusBarStyle: 'dark-content',
+
+  // Secondary accent (Tufts palette)
+  purple: '#2B6CB0',
+  purpleLight: '#418FDE',
+  purpleBg: 'rgba(43,108,176,0.08)',
+  purpleBorder: 'rgba(43,108,176,0.20)',
+  purpleGradient: ['#418FDE', '#3579C6', '#2B6CB0'],
+  gradientBar: ['#6AADE4', '#418FDE', '#3579C6', '#2B6CB0', '#1E5A9E', '#163D6B'],
 };
 
 const ThemeContext = createContext();

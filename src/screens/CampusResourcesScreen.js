@@ -90,7 +90,7 @@ const ALL_RESOURCES = [
     id: 'fitness',
     label: 'Fitness Center',
     Icon: Dumbbell,
-    color: '#8B5CF6',
+    color: '#3579C6',
     url: 'https://ase.tufts.edu/campusrec',
   },
   {
