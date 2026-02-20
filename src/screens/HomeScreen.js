@@ -52,14 +52,14 @@ const FEATURED_FALLBACK_IMAGES = [
 ];
 
 const EVENT_CATEGORIES = [
-  { id: 'all', label: 'All', icon: '\u{1F300}' },
-  { id: 'student_org', label: 'Student Orgs', icon: '\u{1F49C}' },
-  { id: 'arts_culture', label: 'Arts & Culture', icon: '\u{1F3AD}' },
-  { id: 'sports', label: 'Sports', icon: '\u{1F525}' },
-  { id: 'academic', label: 'Academic', icon: '\u{1F4A1}' },
-  { id: 'outdoors', label: 'Outdoors', icon: '\u{1F33F}' },
-  { id: 'campus_center', label: 'Campus Center', icon: '\u{1F48E}' },
-  { id: 'greek_life', label: 'Greek Life', icon: '\u{1F3DB}\uFE0F' },
+  { id: 'all', label: 'All' },
+  { id: 'student_org', label: 'Student Orgs' },
+  { id: 'arts_culture', label: 'Arts & Culture' },
+  { id: 'sports', label: 'Sports' },
+  { id: 'academic', label: 'Academic' },
+  { id: 'outdoors', label: 'Outdoors' },
+  { id: 'campus_center', label: 'Campus Center' },
+  { id: 'greek_life', label: 'Greek Life' },
 ];
 
 const QUICK_FILTERS = [
@@ -552,7 +552,6 @@ export default function HomeScreen({ navigation }) {
                 accessibilityLabel={`Category: ${cat.label}${isActive ? ', selected' : ''}`}
                 accessibilityRole="button"
               >
-                <Text style={styles.categoryIcon}>{cat.icon}</Text>
                 <Text style={[styles.categoryText, isActive && styles.categoryTextActive]}>
                   {cat.label}
                 </Text>
@@ -775,7 +774,6 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row', gap: 6, flexShrink: 0,
   },
   categoryChipActive: { backgroundColor: colors.accentBg, borderColor: colors.accentBorder },
-  categoryIcon: { fontSize: 14 },
   categoryText: { color: colors.textTertiary, fontSize: 12, fontWeight: '700' },
   categoryTextActive: { color: colors.accent },
 
