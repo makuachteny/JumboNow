@@ -23,7 +23,7 @@ export const friendGroupsService = {
     return data || [];
   },
 
-  async createGroup(name, icon = '👥', color = '#6AADE4') {
+  async createGroup(name, icon = '👥', color = '#418FDE') {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 

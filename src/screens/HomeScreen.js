@@ -23,13 +23,14 @@ import {
   Calendar,
   Plus,
   Bookmark,
-  UtensilsCrossed,
   Pizza,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { eventsService } from '../services/events.service';
 import { freeFoodService } from '../services/freefood.service';
+import { authService } from '../services/auth.service';
 import { useTheme } from '../context/ThemeContext';
+import { useDemo } from '../context/DemoContext';
 import { withOpacity } from '../utils/safeColor';
 import SmartIcon from '../components/SmartIcon';
 import { getEventIcon } from '../config/clubLogos';
@@ -72,9 +73,11 @@ const QUICK_FILTERS = [
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const { isDemoMode, demoProfile, demoEvents } = useDemo();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
+  const [accountType, setAccountType] = useState('student');
   const [quickFilter, setQuickFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [events, setEvents] = useState([]);
@@ -89,6 +92,17 @@ export default function HomeScreen({ navigation }) {
   const [showFabMenu, setShowFabMenu] = useState(false);
   const isFirstLoad = useRef(true);
   const filtersLoaded = useRef(false);
+
+  // Fetch account type for role-specific UI
+  useEffect(() => {
+    if (isDemoMode && demoProfile) {
+      setAccountType(demoProfile.account_type);
+    } else {
+      authService.getCurrentProfile().then((profile) => {
+        if (profile?.account_type) setAccountType(profile.account_type);
+      }).catch(() => {});
+    }
+  }, [isDemoMode, demoProfile]);
 
   // Entrance animations
   const headerFade = useRef(new Animated.Value(0)).current;
@@ -207,6 +221,17 @@ export default function HomeScreen({ navigation }) {
   }, [quickFilter, categoryFilter]);
 
   const fetchEvents = useCallback(async (pageNum = 0) => {
+    // In demo mode, use mock events
+    if (isDemoMode) {
+      const featured = demoEvents.filter((e) => e.is_featured);
+      setEvents(demoEvents);
+      setFeaturedEvents(featured);
+      setHasMore(false);
+      setLoadingEvents(false);
+      setLoadingMore(false);
+      return;
+    }
+
     try {
       setError(null);
 
@@ -261,7 +286,7 @@ export default function HomeScreen({ navigation }) {
       setLoadingEvents(false);
       setLoadingMore(false);
     }
-  }, [quickFilter, categoryFilter]);
+  }, [quickFilter, categoryFilter, isDemoMode, demoEvents]);
 
   // Reset page and reload when filters change
   useEffect(() => {
@@ -504,7 +529,7 @@ export default function HomeScreen({ navigation }) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filtersContainer}
         >
-          {QUICK_FILTERS.map((f) => {
+          {QUICK_FILTERS.filter((f) => !(accountType === 'club' && f.id === 'friends')).map((f) => {
             const isActive = quickFilter === f.id;
             return (
               <TouchableOpacity
@@ -561,7 +586,7 @@ export default function HomeScreen({ navigation }) {
         </ScrollView>
       </Animated.View>
     </>
-  ), [styles, colors, featuredEvents, quickFilter, categoryFilter, navigation, activeFoodCount]);
+  ), [styles, colors, featuredEvents, quickFilter, categoryFilter, navigation, activeFoodCount, accountType]);
 
   return (
     <LinearGradient colors={colors.backgroundGradient} style={styles.container}>
@@ -578,8 +603,12 @@ export default function HomeScreen({ navigation }) {
               accessibilityLabel="JumboNow logo"
             />
             <View style={styles.headerBrand}>
-              <Text style={styles.headerTitle}>Campus Life</Text>
-              <Text style={styles.headerSubtitle}>Tufts University Events</Text>
+              <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                {accountType === 'club' ? 'Club Dashboard' : accountType === 'staff' ? 'Staff Hub' : 'Campus Life'}
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                {accountType === 'club' ? 'Manage your events & reach' : accountType === 'staff' ? 'University events & resources' : 'Tufts University Events'}
+              </Text>
             </View>
             <TouchableOpacity
               style={styles.iconButton}
@@ -633,24 +662,44 @@ export default function HomeScreen({ navigation }) {
             activeOpacity={0.8}
           >
             <Calendar size={16} color={colors.accent} />
-            <Text style={styles.fabMenuText}>Create Event</Text>
+            <Text style={styles.fabMenuText}>
+              {accountType === 'club' ? 'Create Club Event' : accountType === 'staff' ? 'Create Campus Event' : 'Create Event'}
+            </Text>
           </TouchableOpacity>
+          {accountType === 'club' && (
+            <>
+              <View style={styles.fabMenuDivider} />
+              <TouchableOpacity
+                style={styles.fabMenuItem}
+                onPress={() => { setShowFabMenu(false); navigation.navigate('MyTickets'); }}
+                activeOpacity={0.8}
+              >
+                <Users size={16} color="#8B5CF6" />
+                <Text style={styles.fabMenuText}>My Events & Attendees</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {accountType === 'staff' && (
+            <>
+              <View style={styles.fabMenuDivider} />
+              <TouchableOpacity
+                style={styles.fabMenuItem}
+                onPress={() => { setShowFabMenu(false); navigation.navigate('CampusResources'); }}
+                activeOpacity={0.8}
+              >
+                <MapPin size={16} color="#3579C6" />
+                <Text style={styles.fabMenuText}>Campus Resources</Text>
+              </TouchableOpacity>
+            </>
+          )}
           <View style={styles.fabMenuDivider} />
           <TouchableOpacity
             style={styles.fabMenuItem}
-            onPress={() => { setShowFabMenu(false); navigation.navigate('Dining'); }}
-            activeOpacity={0.8}
-          >
-            <UtensilsCrossed size={16} color="#F59E0B" />
-            <Text style={styles.fabMenuText}>Dining & Food</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.fabSubItem}
             onPress={() => { setShowFabMenu(false); navigation.navigate('FreeFood'); }}
             activeOpacity={0.8}
           >
-            <Pizza size={14} color="#22C55E" />
-            <Text style={styles.fabSubText}>Free Food</Text>
+            <Pizza size={16} color="#22C55E" />
+            <Text style={styles.fabMenuText}>Free Food</Text>
             {activeFoodCount > 0 && (
               <View style={styles.fabFoodBadge}>
                 <Text style={styles.fabFoodBadgeText}>{activeFoodCount}</Text>
@@ -684,11 +733,7 @@ const createStyles = (colors) => StyleSheet.create({
 
   // -- Header (fixed) --
   header: {
-    backgroundColor: colors.headerBg,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.cardBorder,
+    backgroundColor: 'transparent',
   },
   headerTop: {
     flexDirection: 'row',
@@ -799,8 +844,8 @@ const createStyles = (colors) => StyleSheet.create({
   rsvpFreeButton: { backgroundColor: colors.success },
   rsvpPaidButton: { backgroundColor: colors.buttonPrimary },
   rsvpButtonText: { color: '#FFF', fontSize: 12, fontWeight: '800' },
-  priceTagFree: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: 'rgba(34,197,94,0.15)' },
-  priceTagFreeText: { color: '#22C55E', fontSize: 10, fontWeight: '800' },
+  priceTagFree: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: colors.success + '26' },
+  priceTagFreeText: { color: colors.success, fontSize: 10, fontWeight: '800' },
   priceTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: colors.accentBg },
   priceTagText: { color: colors.accent, fontSize: 10, fontWeight: '800' },
   friendsOnlyBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(139,92,246,0.15)' },
@@ -814,10 +859,10 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 12,
-    backgroundColor: 'rgba(34,197,94,0.14)',
+    backgroundColor: colors.success + '24',
   },
   freeFoodChipEmoji: { fontSize: 11 },
-  freeFoodChipBadgeText: { color: '#22C55E', fontSize: 11, fontWeight: '800' },
+  freeFoodChipBadgeText: { color: colors.success, fontSize: 11, fontWeight: '800' },
 
   // -- Empty / FAB --
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 10 },
@@ -854,18 +899,8 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: 13,
   },
   fabMenuText: { fontSize: 14, fontWeight: '700', color: colors.text },
-  fabSubItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingLeft: 42,
-    paddingVertical: 10,
-    backgroundColor: colors.background,
-  },
-  fabSubText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
   fabFoodBadge: {
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
     minWidth: 18,
     height: 18,
     borderRadius: 9,

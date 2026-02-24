@@ -1,21 +1,28 @@
 import { supabase } from '../config/supabase';
+import { authService } from './auth.service';
 
 const isSchemaError = (error) =>
   error?.message?.includes('schema cache') || error?.message?.includes('Could not find');
 
 function generateConfirmationCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
   let result = 'JMB-';
   for (let i = 0; i < 4; i++) {
-    result += chars.charAt(bytes[i] % chars.length);
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
 }
 
+// In-memory demo data for free food
+let _demoPosts = [];
+let _demoRequests = [];
+let _demoSubscribed = false;
+
 export const freeFoodService = {
   async getActivePosts() {
+    if (authService.isDemoMode()) {
+      return _demoPosts.filter(p => p.is_active && new Date(p.expires_at) > new Date());
+    }
     // Clean up expired posts first
     try { await supabase.rpc('cleanup_expired_free_food'); } catch (_) {}
 
@@ -37,6 +44,9 @@ export const freeFoodService = {
   },
 
   async getActiveCount() {
+    if (authService.isDemoMode()) {
+      return _demoPosts.filter(p => p.is_active && new Date(p.expires_at) > new Date()).length;
+    }
     const { count, error } = await supabase
       .from('free_food_posts')
       .select('id', { count: 'exact', head: true })
@@ -48,6 +58,9 @@ export const freeFoodService = {
   },
 
   async uploadFoodImage(uri) {
+    if (authService.isDemoMode()) {
+      return uri; // In demo mode, just return the original URI
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -71,6 +84,24 @@ export const freeFoodService = {
   },
 
   async requestFood(postId, { partySize = 1, eta = null, dietaryNotes = null } = {}) {
+    if (authService.isDemoMode()) {
+      const existing = _demoRequests.find(r => r.post_id === postId && r.requester_id === 'demo-user');
+      if (existing) throw new Error('You already requested this food');
+      const code = generateConfirmationCode();
+      const request = {
+        id: `demo-req-${Date.now()}`,
+        post_id: postId,
+        requester_id: 'demo-user',
+        party_size: partySize,
+        eta,
+        dietary_notes: dietaryNotes,
+        confirmation_code: code,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      };
+      _demoRequests.push(request);
+      return request;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -114,6 +145,11 @@ export const freeFoodService = {
   },
 
   async getRequests(postId) {
+    if (authService.isDemoMode()) {
+      return _demoRequests
+        .filter(r => r.post_id === postId)
+        .map(r => ({ ...r, requester: { id: r.requester_id, username: 'demo_user', display_name: 'Demo User', avatar_url: null, avatar_color: '#418FDE' } }));
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -134,6 +170,11 @@ export const freeFoodService = {
   },
 
   async confirmRequest(requestId) {
+    if (authService.isDemoMode()) {
+      const r = _demoRequests.find(r => r.id === requestId);
+      if (r) r.status = 'confirmed';
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -165,6 +206,11 @@ export const freeFoodService = {
   },
 
   async declineRequest(requestId) {
+    if (authService.isDemoMode()) {
+      const r = _demoRequests.find(r => r.id === requestId);
+      if (r) r.status = 'declined';
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -196,6 +242,9 @@ export const freeFoodService = {
   },
 
   async getMyRequests() {
+    if (authService.isDemoMode()) {
+      return _demoRequests.filter(r => r.requester_id === 'demo-user');
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
@@ -209,6 +258,9 @@ export const freeFoodService = {
   },
 
   subscribeToRequests(postId, callback) {
+    if (authService.isDemoMode()) {
+      return { unsubscribe: () => {} };
+    }
     return supabase
       .channel(`food-requests-${postId}`)
       .on('postgres_changes', {
@@ -221,6 +273,27 @@ export const freeFoodService = {
   },
 
   async createPost({ title, description, food_type, location_name, latitude, longitude, custom_location_detail, emoji, expires_at, image_url }) {
+    if (authService.isDemoMode()) {
+      const post = {
+        id: `demo-food-${Date.now()}`,
+        posted_by: 'demo-user',
+        title,
+        description: description || null,
+        food_type: food_type || 'other',
+        location_name,
+        latitude: latitude || null,
+        longitude: longitude || null,
+        custom_location_detail: custom_location_detail || null,
+        emoji: emoji || '\u{1F355}',
+        expires_at,
+        image_url: image_url || null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        poster: { id: 'demo-user', username: 'demo_user', display_name: 'Demo User', avatar_url: null },
+      };
+      _demoPosts.push(post);
+      return post;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -265,6 +338,11 @@ export const freeFoodService = {
   },
 
   async deactivatePost(postId) {
+    if (authService.isDemoMode()) {
+      const p = _demoPosts.find(p => p.id === postId);
+      if (p) p.is_active = false;
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -278,6 +356,10 @@ export const freeFoodService = {
   },
 
   async deletePost(postId) {
+    if (authService.isDemoMode()) {
+      _demoPosts = _demoPosts.filter(p => p.id !== postId);
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -291,6 +373,7 @@ export const freeFoodService = {
   },
 
   async isSubscribed() {
+    if (authService.isDemoMode()) return _demoSubscribed;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
@@ -308,6 +391,7 @@ export const freeFoodService = {
   },
 
   async subscribe() {
+    if (authService.isDemoMode()) { _demoSubscribed = true; return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -322,6 +406,7 @@ export const freeFoodService = {
   },
 
   async unsubscribe() {
+    if (authService.isDemoMode()) { _demoSubscribed = false; return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -335,6 +420,7 @@ export const freeFoodService = {
   },
 
   subscribeToNewPosts(callback) {
+    if (authService.isDemoMode()) return { unsubscribe: () => {} };
     return supabase
       .channel('free-food-new')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'free_food_posts' }, callback)
@@ -342,6 +428,7 @@ export const freeFoodService = {
   },
 
   subscribeToPostChanges(callback) {
+    if (authService.isDemoMode()) return { unsubscribe: () => {} };
     return supabase
       .channel('free-food-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'free_food_posts' }, callback)

@@ -152,7 +152,7 @@ export default function DiningMenuScreen({ navigation, route }) {
       key: m.key,
       label: diningService.getMealPeriodLabel(m.key),
       emoji: MEAL_EMOJI[m.key] || '\u{1F37D}',
-      gradient: MEAL_GRADIENT[m.key] || ['#6AADE4', '#418FDE'],
+      gradient: MEAL_GRADIENT[m.key] || ['#418FDE', '#418FDE'],
       hasData: m.stations.length > 0,
       itemCount: m.stations.reduce((acc, s) => acc + s.data.length, 0),
     }));
@@ -202,7 +202,7 @@ export default function DiningMenuScreen({ navigation, route }) {
                   </View>
                 )}
                 {dietBadges.map((icon, i) => {
-                  const config = DIET_ICONS[icon.slug] || { label: icon.label?.slice(0, 2) || '?', color: '#6AADE4', bg: '#6AADE418' };
+                  const config = DIET_ICONS[icon.slug] || { label: icon.label?.slice(0, 2) || '?', color: '#418FDE', bg: '#418FDE18' };
                   return (
                     <View key={i} style={[styles.dietPill, { backgroundColor: config.bg }]}>
                       <Text style={[styles.dietPillText, { color: config.color }]}>{config.label}</Text>
@@ -308,7 +308,7 @@ export default function DiningMenuScreen({ navigation, route }) {
     </View>
   ), [styles]);
 
-  const activeMealGradient = MEAL_GRADIENT[activeMeal] || ['#6AADE4', '#418FDE'];
+  const activeMealGradient = MEAL_GRADIENT[activeMeal] || ['#418FDE', '#418FDE'];
 
   return (
     <LinearGradient colors={colors.backgroundGradient} style={styles.container}>

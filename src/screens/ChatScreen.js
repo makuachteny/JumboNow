@@ -829,7 +829,7 @@ const createStyles = (colors) =>
       width: 14,
       height: 14,
       borderRadius: 7,
-      backgroundColor: '#22C55E',
+      backgroundColor: colors.success,
       borderWidth: 2.5,
       borderColor: colors.background,
     },

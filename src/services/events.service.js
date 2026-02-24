@@ -1,9 +1,24 @@
 import { supabase } from '../config/supabase';
+import { authService } from './auth.service';
 
 const PAGE_SIZE = 20;
 
+let _demoEvents = [];
+
 export const eventsService = {
+  setDemoEvents(events) { _demoEvents = events; },
+  clearDemoEvents() { _demoEvents = []; },
+
   async getEvents({ category, isLive, page = 0 } = {}) {
+    if (authService.isDemoMode()) {
+      let results = [..._demoEvents];
+      if (category && category !== 'all') results = results.filter(e => e.category === category || e.event_type === category);
+      if (isLive) {
+        const now = new Date().toISOString();
+        results = results.filter(e => e.start_time <= now && e.end_time >= now);
+      }
+      return results.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    }
     let query = supabase
       .from('events')
       .select(`
@@ -34,6 +49,7 @@ export const eventsService = {
   },
 
   async getFriendsEvents({ page = 0 } = {}) {
+    if (authService.isDemoMode()) return _demoEvents.slice(0, 5);
     try {
       const { data: idRows, error: rpcError } = await supabase.rpc('get_friends_event_ids', {
         p_limit: PAGE_SIZE,
@@ -65,6 +81,7 @@ export const eventsService = {
   },
 
   async getFeaturedEvents() {
+    if (authService.isDemoMode()) return _demoEvents.filter(e => e.is_featured);
     let { data, error } = await supabase
       .from('events')
       .select(`
@@ -98,6 +115,14 @@ export const eventsService = {
   },
 
   async getEventsByFilters({ eventType, eventTypes, isFree, timeRange, page = 0 } = {}) {
+    if (authService.isDemoMode()) {
+      let results = [..._demoEvents];
+      if (eventType && eventType !== 'all') results = results.filter(e => e.event_type === eventType);
+      if (eventTypes && eventTypes.length > 0) results = results.filter(e => eventTypes.includes(e.event_type));
+      if (isFree === true) results = results.filter(e => !e.ticket_price || e.ticket_price === 0);
+      if (isFree === false) results = results.filter(e => e.ticket_price > 0);
+      return results.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    }
     const now = new Date().toISOString();
     const hasCategories = (eventTypes && eventTypes.length > 0) || (eventType && eventType !== 'all');
     const hasPrice = isFree === true || isFree === false;
@@ -191,6 +216,15 @@ export const eventsService = {
 
   async searchEvents(query, { page = 0 } = {}) {
     if (!query || query.trim().length < 2) return [];
+    if (authService.isDemoMode()) {
+      const q = query.trim().toLowerCase();
+      return _demoEvents.filter(e =>
+        e.title.toLowerCase().includes(q) ||
+        (e.description && e.description.toLowerCase().includes(q)) ||
+        (e.location && e.location.toLowerCase().includes(q)) ||
+        (e.organizer_name && e.organizer_name.toLowerCase().includes(q))
+      );
+    }
 
     const searchTerms = query.trim().split(/\s+/).join(' & ');
     const q = query.trim().toLowerCase();
@@ -238,6 +272,7 @@ export const eventsService = {
   },
 
   async logSearch(query) {
+    if (authService.isDemoMode()) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !query?.trim()) return;
 
@@ -248,6 +283,7 @@ export const eventsService = {
   },
 
   async getTrendingSearches() {
+    if (authService.isDemoMode()) return ['spring fling', 'basketball', 'robotics', 'career fair', 'a cappella'];
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
@@ -273,6 +309,11 @@ export const eventsService = {
   },
 
   async getEventById(eventId) {
+    if (authService.isDemoMode()) {
+      const ev = _demoEvents.find(e => e.id === eventId);
+      if (!ev) throw new Error('Event not found');
+      return ev;
+    }
     const { data, error } = await supabase
       .from('events')
       .select(`
@@ -287,6 +328,11 @@ export const eventsService = {
   },
 
   async createEvent(eventData) {
+    if (authService.isDemoMode()) {
+      const demoEvent = { ...eventData, id: `demo-new-${Date.now()}`, attendee_count: 0, created_by: 'demo-user' };
+      _demoEvents.unshift(demoEvent);
+      return demoEvent;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -327,6 +373,11 @@ export const eventsService = {
   },
 
   async updateEvent(eventId, eventData) {
+    if (authService.isDemoMode()) {
+      const idx = _demoEvents.findIndex(e => e.id === eventId);
+      if (idx >= 0) Object.assign(_demoEvents[idx], eventData);
+      return _demoEvents[idx] || eventData;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -355,6 +406,10 @@ export const eventsService = {
   },
 
   async deleteEvent(eventId) {
+    if (authService.isDemoMode()) {
+      _demoEvents = _demoEvents.filter(e => e.id !== eventId);
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -367,6 +422,7 @@ export const eventsService = {
   },
 
   async joinEvent(eventId) {
+    if (authService.isDemoMode()) return { event_id: eventId };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -393,6 +449,7 @@ export const eventsService = {
   },
 
   async leaveEvent(eventId) {
+    if (authService.isDemoMode()) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -405,6 +462,7 @@ export const eventsService = {
   },
 
   async isAttending(eventId) {
+    if (authService.isDemoMode()) return false;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
@@ -418,6 +476,7 @@ export const eventsService = {
   },
 
   async getSavedEventIds() {
+    if (authService.isDemoMode()) return [];
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
@@ -430,6 +489,7 @@ export const eventsService = {
   },
 
   async getSavedEventCount() {
+    if (authService.isDemoMode()) return 0;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return 0;
 
@@ -442,6 +502,7 @@ export const eventsService = {
   },
 
   async inviteFriendToEvent(eventId, inviteeId) {
+    if (authService.isDemoMode()) return { event_id: eventId, invitee_id: inviteeId };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -459,6 +520,7 @@ export const eventsService = {
   },
 
   async inviteGroupToEvent(eventId, groupId) {
+    if (authService.isDemoMode()) return [];
     const { data: members, error: membersError } = await supabase
       .from('friend_group_members')
       .select('user_id')
@@ -486,6 +548,7 @@ export const eventsService = {
   },
 
   async getMyInvitations() {
+    if (authService.isDemoMode()) return [];
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -505,6 +568,7 @@ export const eventsService = {
   },
 
   async respondToInvitation(invitationId, status) {
+    if (authService.isDemoMode()) return { id: invitationId, status };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -521,6 +585,7 @@ export const eventsService = {
   },
 
   subscribeToEvents(callback) {
+    if (authService.isDemoMode()) return { unsubscribe: () => {} };
     return supabase
       .channel('events-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, callback)

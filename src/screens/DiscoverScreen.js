@@ -787,7 +787,7 @@ const createStyles = (colors) => StyleSheet.create({
   eventCardBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingBottom: 12, paddingTop: 2 },
   eventTagsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   freeTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: 'rgba(34,197,94,0.12)' },
-  freeTagText: { color: '#22C55E', fontSize: 12, fontWeight: '600' },
+  freeTagText: { color: colors.success, fontSize: 12, fontWeight: '600' },
   priceTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.accentBg },
   priceTagText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
   eventTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.surfaceAlt },

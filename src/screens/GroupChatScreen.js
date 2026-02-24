@@ -260,7 +260,7 @@ export default function GroupChatScreen({ navigation, route }) {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Go back" accessibilityRole="button">
           <ArrowLeft size={22} color={colors.accent} />
         </TouchableOpacity>
-        <View style={[styles.groupIconWrap, { backgroundColor: (route.params?.groupColor || '#6AADE4') + '20' }]}>
+        <View style={[styles.groupIconWrap, { backgroundColor: (route.params?.groupColor || '#418FDE') + '20' }]}>
           <Text style={styles.groupIconText}>{groupIcon}</Text>
         </View>
         <View style={styles.chatHeaderInfo}>
@@ -412,7 +412,7 @@ export default function GroupChatScreen({ navigation, route }) {
                 {friendsList.map((friend) => {
                   const name = friend.display_name || friend.username || 'User';
                   const initials = name.slice(0, 2).toUpperCase();
-                  const avatarBg = friend.avatar_color || '#6AADE4';
+                  const avatarBg = friend.avatar_color || '#418FDE';
                   const isAdding = addingMember === friend.id;
                   return (
                     <View key={friend.id} style={styles.addMemberRow}>

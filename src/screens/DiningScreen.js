@@ -133,7 +133,7 @@ export default function DiningScreen({ navigation }) {
     const servingMeal = mealSlugs.includes(currentMeal) || mealSlugs.includes('daily');
     const TypeIcon = TYPE_ICON[loc.type] || Utensils;
 
-    const statusColor = isClosed ? '#EF4444' : isClosingSoon ? '#F59E0B' : '#22C55E';
+    const statusColor = isClosed ? colors.error : isClosingSoon ? colors.warning : colors.success;
     const statusLabel = isClosed ? 'Closed' : isClosingSoon ? 'Closing Soon' : 'Open Now';
 
     return (

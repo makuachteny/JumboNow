@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -34,8 +34,13 @@ import {
   CalendarPlus,
   MessageCircle,
   ChevronRight,
+  Download,
+  ScanLine,
 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
+import ViewShot, { captureRef } from 'react-native-view-shot';
+import * as MediaLibrary from 'expo-media-library';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { eventsService } from '../services/events.service';
 import { ticketsService } from '../services/tickets.service';
 import { reportsService } from '../services/reports.service';
@@ -43,7 +48,7 @@ import { friendsService } from '../services/friends.service';
 import { friendGroupsService } from '../services/friendGroups.service';
 import { chatService } from '../services/chat.service';
 import { groupChatService } from '../services/groupChat.service';
-import { supabase } from '../config/supabase';
+import { authService } from '../services/auth.service';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import SmartIcon from '../components/SmartIcon';
@@ -95,19 +100,70 @@ export default function EventDetailScreen({ route, navigation }) {
   const [chatPickerGroups, setChatPickerGroups] = useState([]);
   const [chatPickerLoading, setChatPickerLoading] = useState(false);
   const [sharedToIds, setSharedToIds] = useState(new Set());
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const qrRef = useRef(null);
+
+  const handleDownloadQr = useCallback(async () => {
+    try {
+      if (!qrRef.current) return;
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to save tickets.');
+        return;
+      }
+      const uri = await captureRef(qrRef, { format: 'png', quality: 1 });
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert('Saved!', 'Ticket QR code saved to your photo library.');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to save QR code.');
+    }
+  }, []);
+
+  const handleOpenScanner = useCallback(async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      if (!result.granted) {
+        Alert.alert('Permission Required', 'Camera access is needed to scan tickets.');
+        return;
+      }
+    }
+    setScanResult(null);
+    setShowScanner(true);
+  }, [cameraPermission, requestCameraPermission]);
+
+  const handleBarcodeScanned = useCallback(({ data }) => {
+    if (scanResult) return;
+    const match = data.match(/^jumbonow:\/\/ticket\/(.+)$/);
+    if (match) {
+      const code = match[1];
+      const attendee = attendees.find((a) => a.confirmation_code === code);
+      if (attendee) {
+        const name = attendee.profile?.display_name || attendee.profile?.username || 'Attendee';
+        setScanResult({ valid: true, name, code });
+      } else {
+        setScanResult({ valid: false, code });
+      }
+    } else {
+      setScanResult({ valid: false, code: null });
+    }
+  }, [attendees, scanResult]);
 
   const fetchData = useCallback(async () => {
     try {
-      const [eventData, reservationData, { data: { user } }] = await Promise.all([
+      const [eventData, reservationData] = await Promise.all([
         eventsService.getEventById(eventId),
         ticketsService.getReservationForEvent(eventId),
-        supabase.auth.getUser(),
       ]);
       setEvent(eventData);
       setReservation(reservationData);
-      if (user && eventData && user.id === eventData.created_by) {
+
+      // Determine if current user is the event creator
+      const profile = await authService.getCurrentProfile();
+      const userId = profile?.id;
+      if (userId && eventData && userId === eventData.created_by) {
         setIsCreator(true);
-        // Load attendees for the event creator
         setAttendeesLoading(true);
         ticketsService.getEventAttendees(eventId)
           .then((data) => setAttendees(data))
@@ -499,7 +555,7 @@ export default function EventDetailScreen({ route, navigation }) {
                 const displayName = profile?.display_name || profile?.username || 'Unknown';
                 const username = profile?.username;
                 const initials = displayName.slice(0, 2).toUpperCase();
-                const avatarColor = profile?.avatar_color || '#6AADE4';
+                const avatarColor = profile?.avatar_color || '#418FDE';
                 const isPaid = attendee.reservation_type === 'ticket_purchase';
                 const isLast = index === attendees.length - 1;
 
@@ -530,13 +586,22 @@ export default function EventDetailScreen({ route, navigation }) {
         {isCreator && (
           <View style={styles.creatorActions}>
             <TouchableOpacity
+              style={styles.scanButton}
+              onPress={handleOpenScanner}
+              accessibilityLabel="Scan tickets"
+              accessibilityRole="button"
+            >
+              <ScanLine size={16} color="#FFF" />
+              <Text style={styles.scanButtonText}>Scan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.editButton}
               onPress={() => navigation.navigate('CreateEvent', { editEvent: event })}
               accessibilityLabel="Edit event"
               accessibilityRole="button"
             >
               <Edit3 size={16} color={colors.accent} />
-              <Text style={styles.editButtonText}>Edit Event</Text>
+              <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
@@ -545,7 +610,7 @@ export default function EventDetailScreen({ route, navigation }) {
               accessibilityRole="button"
             >
               <Trash2 size={16} color={colors.error} />
-              <Text style={styles.deleteButtonText}>Delete Event</Text>
+              <Text style={styles.deleteButtonText}>Delete</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -630,41 +695,53 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
 
             {/* QR Code Ticket */}
-            <View style={styles.qrTicketCard}>
-              <View style={styles.qrCodeWrap}>
-                <QRCode
-                  value={`jumbonow://ticket/${reservation.confirmation_code}`}
-                  size={160}
-                  backgroundColor="#FFFFFF"
-                  color="#0B1A2E"
-                  quietZone={12}
-                />
-              </View>
-              <Text style={styles.qrScanHint}>Scan at entry for check-in</Text>
-              <View style={styles.qrDivider}>
-                <View style={styles.qrDividerCircleLeft} />
-                <View style={styles.qrDividerLine} />
-                <View style={styles.qrDividerCircleRight} />
-              </View>
-              <TouchableOpacity
-                style={styles.qrCodeRow}
-                onPress={async () => {
-                  await Clipboard.setStringAsync(reservation.confirmation_code);
-                  Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
-                }}
-                accessibilityLabel={`Confirmation code: ${reservation.confirmation_code}. Tap to copy`}
-                accessibilityRole="button"
-              >
-                <View>
-                  <Text style={styles.codeLabel}>Confirmation Code</Text>
-                  <Text style={styles.codeText}>{reservation.confirmation_code}</Text>
+            <ViewShot ref={qrRef} options={{ format: 'png', quality: 1 }}>
+              <View style={styles.qrTicketCard}>
+                <View style={styles.qrCodeWrap}>
+                  <QRCode
+                    value={`jumbonow://ticket/${reservation.confirmation_code}`}
+                    size={160}
+                    backgroundColor="#FFFFFF"
+                    color="#0B1A2E"
+                    quietZone={12}
+                  />
                 </View>
-                <Text style={styles.codeCopyBtn}>Copy</Text>
-              </TouchableOpacity>
-              <Text style={styles.codeType}>
-                {reservation.reservation_type === 'free_rsvp' ? 'Free RSVP' : `${reservation.ticket_type} Ticket - $${reservation.price_paid}`}
-              </Text>
-            </View>
+                <Text style={styles.qrScanHint}>Scan at entry for check-in</Text>
+                <View style={styles.qrDivider}>
+                  <View style={styles.qrDividerCircleLeft} />
+                  <View style={styles.qrDividerLine} />
+                  <View style={styles.qrDividerCircleRight} />
+                </View>
+                <View style={styles.qrCodeRow}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      await Clipboard.setStringAsync(reservation.confirmation_code);
+                      Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
+                    }}
+                    accessibilityLabel={`Confirmation code: ${reservation.confirmation_code}. Tap to copy`}
+                    accessibilityRole="button"
+                    style={styles.qrCodeRowLeft}
+                  >
+                    <View>
+                      <Text style={styles.codeLabel}>Confirmation Code</Text>
+                      <Text style={styles.codeText}>{reservation.confirmation_code}</Text>
+                    </View>
+                    <Text style={styles.codeCopyBtn}>Copy</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleDownloadQr}
+                    accessibilityLabel="Save QR code to photos"
+                    accessibilityRole="button"
+                    style={styles.downloadIcon}
+                  >
+                    <Download size={20} color={colors.accent} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.codeType}>
+                  {reservation.reservation_type === 'free_rsvp' ? 'Free RSVP' : `${reservation.ticket_type} Ticket - $${reservation.price_paid}`}
+                </Text>
+              </View>
+            </ViewShot>
 
             <TouchableOpacity
               style={styles.cancelButton}
@@ -702,7 +779,7 @@ export default function EventDetailScreen({ route, navigation }) {
       </ScrollView>
 
       {/* Action Area */}
-      {!reservation && (
+      {!reservation && !isCreator && (
         <View style={[styles.actionBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           {isFree ? (
             <TouchableOpacity
@@ -763,7 +840,7 @@ export default function EventDetailScreen({ route, navigation }) {
                     <Text style={styles.inviteSectionLabel}>Groups</Text>
                     {inviteGroups.map((group) => (
                       <View key={group.id} style={styles.inviteRow}>
-                        <View style={[styles.inviteGroupIcon, { backgroundColor: (group.color || '#6AADE4') + '20' }]}>
+                        <View style={[styles.inviteGroupIcon, { backgroundColor: (group.color || '#418FDE') + '20' }]}>
                           <Text style={{ fontSize: 18 }}>{group.icon}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
@@ -790,7 +867,7 @@ export default function EventDetailScreen({ route, navigation }) {
                       const invited = invitedIds.has(friend.id);
                       return (
                         <View key={friend.id} style={styles.inviteRow}>
-                          <View style={[styles.inviteFriendAvatar, { backgroundColor: friend.avatar_color || '#6AADE4' }]}>
+                          <View style={[styles.inviteFriendAvatar, { backgroundColor: friend.avatar_color || '#418FDE' }]}>
                             <Text style={styles.inviteFriendAvatarText}>
                               {(friend.display_name || friend.username || '?').slice(0, 2).toUpperCase()}
                             </Text>
@@ -881,7 +958,7 @@ export default function EventDetailScreen({ route, navigation }) {
                       const shared = sharedToIds.has(group.id);
                       return (
                         <View key={group.id} style={styles.inviteRow}>
-                          <View style={[styles.inviteGroupIcon, { backgroundColor: (group.color || '#6AADE4') + '20' }]}>
+                          <View style={[styles.inviteGroupIcon, { backgroundColor: (group.color || '#418FDE') + '20' }]}>
                             <Text style={{ fontSize: 18 }}>{group.icon}</Text>
                           </View>
                           <View style={{ flex: 1 }}>
@@ -911,7 +988,7 @@ export default function EventDetailScreen({ route, navigation }) {
                       const shared = sharedToIds.has(friend.id);
                       return (
                         <View key={friend.id} style={styles.inviteRow}>
-                          <View style={[styles.inviteFriendAvatar, { backgroundColor: friend.avatar_color || '#6AADE4' }]}>
+                          <View style={[styles.inviteFriendAvatar, { backgroundColor: friend.avatar_color || '#418FDE' }]}>
                             <Text style={styles.inviteFriendAvatarText}>
                               {(friend.display_name || friend.username || '?').slice(0, 2).toUpperCase()}
                             </Text>
@@ -945,6 +1022,69 @@ export default function EventDetailScreen({ route, navigation }) {
               </ScrollView>
             )}
           </View>
+        </View>
+      </Modal>
+
+      {/* Scan Tickets Modal */}
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={styles.scannerContainer}>
+          <View style={[styles.scannerHeader, { paddingTop: insets.top + 8 }]}>
+            <Text style={styles.scannerTitle}>Scan Ticket</Text>
+            <TouchableOpacity
+              onPress={() => { setShowScanner(false); setScanResult(null); }}
+              accessibilityLabel="Close scanner"
+              accessibilityRole="button"
+              style={styles.scannerCloseBtn}
+            >
+              <X size={24} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+
+          {!scanResult ? (
+            <CameraView
+              style={styles.scannerCamera}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={handleBarcodeScanned}
+            >
+              <View style={styles.scannerOverlay}>
+                <View style={styles.scannerFrame} />
+                <Text style={styles.scannerHint}>Point camera at attendee's QR code</Text>
+              </View>
+            </CameraView>
+          ) : (
+            <View style={styles.scanResultContainer}>
+              {scanResult.valid ? (
+                <>
+                  <View style={styles.scanResultIconValid}>
+                    <CheckCircle size={64} color={colors.success} />
+                  </View>
+                  <Text style={styles.scanResultTitle}>Valid Ticket</Text>
+                  <Text style={styles.scanResultName}>{scanResult.name}</Text>
+                  {scanResult.code && (
+                    <Text style={styles.scanResultCode}>{scanResult.code}</Text>
+                  )}
+                </>
+              ) : (
+                <>
+                  <View style={styles.scanResultIconInvalid}>
+                    <X size={64} color={colors.error} />
+                  </View>
+                  <Text style={styles.scanResultTitleInvalid}>Invalid Ticket</Text>
+                  <Text style={styles.scanResultSub}>This QR code does not match any attendee.</Text>
+                </>
+              )}
+              <TouchableOpacity
+                style={styles.scanAnotherBtn}
+                onPress={() => setScanResult(null)}
+                accessibilityLabel="Scan another ticket"
+                accessibilityRole="button"
+              >
+                <ScanLine size={18} color="#FFF" />
+                <Text style={styles.scanAnotherText}>Scan Another</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -1091,7 +1231,9 @@ const createStyles = (colors) => StyleSheet.create({
   organizerName: { color: colors.text, fontSize: 15, fontWeight: '700' },
   organizerType: { color: colors.textTertiary, fontSize: 12, fontWeight: '500', marginTop: 2 },
   reportButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.inputBg, alignItems: 'center', justifyContent: 'center' },
-  creatorActions: { flexDirection: 'row', gap: 10, marginHorizontal: 16, marginTop: 12 },
+  creatorActions: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 12 },
+  scanButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.buttonPrimary },
+  scanButtonText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
   editButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
   editButtonText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
   deleteButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.error + '10', borderWidth: 1, borderColor: colors.error + '40' },
@@ -1138,6 +1280,8 @@ const createStyles = (colors) => StyleSheet.create({
   qrDividerLine: { flex: 1, height: 1, borderStyle: 'dashed', borderWidth: 1, borderColor: colors.cardBorder, marginHorizontal: 8 },
   qrDividerCircleRight: { width: 16, height: 16, borderRadius: 8, backgroundColor: colors.glass, marginRight: -28 },
   qrCodeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4, marginBottom: 6 },
+  qrCodeRowLeft: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 },
+  downloadIcon: { padding: 6 },
   codeLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: '600', marginBottom: 2 },
   codeText: { color: colors.accent, fontSize: 22, fontWeight: '900', letterSpacing: 2 },
   codeCopyBtn: { color: colors.accent, fontSize: 13, fontWeight: '700', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.accentBg, overflow: 'hidden' },
@@ -1233,4 +1377,24 @@ const createStyles = (colors) => StyleSheet.create({
   shareSheetIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   shareSheetOptionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
   shareSheetOptionSub: { color: colors.textTertiary, fontSize: 12, marginTop: 2 },
+
+  // Scanner
+  scannerContainer: { flex: 1, backgroundColor: '#000' },
+  scannerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12, backgroundColor: '#000', zIndex: 10 },
+  scannerTitle: { color: '#FFF', fontSize: 20, fontWeight: '900' },
+  scannerCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  scannerCamera: { flex: 1 },
+  scannerOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scannerFrame: { width: 240, height: 240, borderRadius: 24, borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)' },
+  scannerHint: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '600', marginTop: 24 },
+  scanResultContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: colors.backgroundGradient?.[0] || '#0B1A2E' },
+  scanResultIconValid: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(34,197,94,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  scanResultIconInvalid: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(239,68,68,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  scanResultTitle: { color: colors.success, fontSize: 28, fontWeight: '900', marginBottom: 8 },
+  scanResultTitleInvalid: { color: colors.error, fontSize: 28, fontWeight: '900', marginBottom: 8 },
+  scanResultName: { color: '#FFF', fontSize: 20, fontWeight: '700', marginBottom: 4 },
+  scanResultCode: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '600', letterSpacing: 1, marginBottom: 8 },
+  scanResultSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '500', textAlign: 'center', marginBottom: 8 },
+  scanAnotherBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 32, paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14, backgroundColor: colors.buttonPrimary },
+  scanAnotherText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });

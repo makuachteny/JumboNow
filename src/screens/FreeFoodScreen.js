@@ -581,7 +581,7 @@ export default function FreeFoodScreen({ navigation, route }) {
               reqs.map((req) => {
                 const rName = req.requester?.display_name || req.requester?.username || 'User';
                 const rInitials = rName.slice(0, 2).toUpperCase();
-                const rColor = req.requester?.avatar_color || '#6AADE4';
+                const rColor = req.requester?.avatar_color || '#418FDE';
                 return (
                   <View key={req.id} style={styles.requesterRow}>
                     <View style={[styles.requesterAvatar, { backgroundColor: rColor }]}>
@@ -1107,7 +1107,7 @@ const createStyles = (colors) => StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: 'rgba(34,197,94,0.12)',
+    backgroundColor: colors.success + '1F',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1119,9 +1119,9 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: 'rgba(34,197,94,0.12)',
+    backgroundColor: colors.success + '1F',
   },
-  foodTypeBadgeText: { fontSize: 10, fontWeight: '700', color: '#22C55E' },
+  foodTypeBadgeText: { fontSize: 10, fontWeight: '700', color: colors.success },
 
   postDescription: { fontSize: 12, lineHeight: 17, color: colors.textSecondary },
 
@@ -1166,8 +1166,8 @@ const createStyles = (colors) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderRadius: 28,
-    backgroundColor: '#22C55E',
-    shadowColor: '#22C55E',
+    backgroundColor: colors.success,
+    shadowColor: colors.success,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 14,
@@ -1237,8 +1237,8 @@ const createStyles = (colors) => StyleSheet.create({
     borderColor: colors.cardBorder,
   },
   chipActive: {
-    backgroundColor: '#22C55E',
-    borderColor: '#22C55E',
+    backgroundColor: colors.success,
+    borderColor: colors.success,
   },
   chipEmoji: { fontSize: 14 },
   chipText: { fontSize: 12, fontWeight: '700', color: colors.textTertiary },
@@ -1272,11 +1272,11 @@ const createStyles = (colors) => StyleSheet.create({
     marginHorizontal: 4,
   },
   locationItemActive: {
-    backgroundColor: 'rgba(34,197,94,0.15)',
+    backgroundColor: colors.success + '26',
   },
   locationEmoji: { fontSize: 16 },
   locationName: { fontSize: 14, fontWeight: '600', color: colors.text },
-  locationNameActive: { color: '#22C55E' },
+  locationNameActive: { color: colors.success },
 
   crossPostLink: {
     flexDirection: 'row',
@@ -1292,7 +1292,7 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 16,
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
     marginTop: 8,
     marginBottom: 12,
   },
@@ -1353,7 +1353,7 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 4,
     paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
   },
   comingBtnText: { fontSize: 12, fontWeight: '800', color: '#FFF' },
   confirmCodeBadge: {
@@ -1364,7 +1364,7 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 5,
     paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
   },
   confirmCodeBadgeText: { fontSize: 12, fontWeight: '800', color: '#FFF', letterSpacing: 0.5 },
   pendingBadge: {
@@ -1469,7 +1469,7 @@ const createStyles = (colors) => StyleSheet.create({
   requesterCode: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#22C55E',
+    color: colors.success,
     letterSpacing: 0.5,
   },
   requesterActions: {
@@ -1481,7 +1481,7 @@ const createStyles = (colors) => StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: 'rgba(34,197,94,0.12)',
+    backgroundColor: colors.success + '1F',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1532,7 +1532,7 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 16,
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
     marginTop: 20,
     marginBottom: 12,
   },
@@ -1558,7 +1558,7 @@ const createStyles = (colors) => StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#22C55E',
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
@@ -1571,7 +1571,7 @@ const createStyles = (colors) => StyleSheet.create({
   confirmCodeDisplay: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#22C55E',
+    color: colors.success,
     letterSpacing: 2,
     paddingVertical: 8,
   },

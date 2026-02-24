@@ -28,7 +28,7 @@ const ACCOUNT_TYPES = [
 
 export default function RegisterScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');

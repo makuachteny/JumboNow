@@ -11,8 +11,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Zap } from 'lucide-react-native';
+import { Zap, GraduationCap, Building2, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useDemo } from '../context/DemoContext';
 import { supabase } from '../config/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -101,12 +102,24 @@ function FloatingEmoji({ emoji, delay, startX, duration }) {
 export default function LandingScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const { enterDemoMode } = useDemo();
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(40)).current;
   const logoScale = useRef(new Animated.Value(0.3)).current;
   const logoPulse = useRef(new Animated.Value(1)).current;
   const [liveEventCount, setLiveEventCount] = useState(0);
   const [studentCount, setStudentCount] = useState(0);
+  const [demoLoading, setDemoLoading] = useState(null);
+
+  const handleDemoLogin = async (role) => {
+    setDemoLoading(role);
+    try {
+      await enterDemoMode(role);
+      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+    } catch (_) {
+      setDemoLoading(null);
+    }
+  };
 
   const s = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
@@ -285,6 +298,44 @@ export default function LandingScreen({ navigation }) {
             <Text style={s.secondaryButtonText}>I already have an account</Text>
           </TouchableOpacity>
 
+          {/* Demo Mode */}
+          <View style={s.demoSection}>
+            <View style={s.demoDividerRow}>
+              <View style={s.demoDividerLine} />
+              <Text style={s.demoDividerText}>or try a demo</Text>
+              <View style={s.demoDividerLine} />
+            </View>
+            <View style={s.demoButtonRow}>
+              <TouchableOpacity
+                style={[s.demoButton, demoLoading === 'student' && s.demoButtonLoading]}
+                onPress={() => handleDemoLogin('student')}
+                activeOpacity={0.8}
+                disabled={!!demoLoading}
+              >
+                <GraduationCap size={16} color={colors.accent} />
+                <Text style={s.demoButtonText}>Student</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.demoButton, demoLoading === 'club' && s.demoButtonLoading]}
+                onPress={() => handleDemoLogin('club')}
+                activeOpacity={0.8}
+                disabled={!!demoLoading}
+              >
+                <Users size={16} color="#8B5CF6" />
+                <Text style={[s.demoButtonText, { color: '#8B5CF6' }]}>Club</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.demoButton, demoLoading === 'staff' && s.demoButtonLoading]}
+                onPress={() => handleDemoLogin('staff')}
+                activeOpacity={0.8}
+                disabled={!!demoLoading}
+              >
+                <Building2 size={16} color="#3579C6" />
+                <Text style={[s.demoButtonText, { color: '#3579C6' }]}>Staff</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <Text style={s.termsText}>
             By continuing, you agree to our{' '}
             <Text style={s.termsLink}>Terms</Text> &{' '}
@@ -456,11 +507,55 @@ const createStyles = (colors, isDark) => StyleSheet.create({
     fontWeight: '700',
     color: colors.accent,
   },
+  demoSection: {
+    width: '100%',
+    marginTop: 4,
+  },
+  demoDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  demoDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.glassBorder,
+  },
+  demoDividerText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  demoButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  demoButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  },
+  demoButtonLoading: {
+    opacity: 0.6,
+  },
+  demoButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.accent,
+  },
   termsText: {
     fontSize: 11,
     color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 12,
   },
   termsLink: {
     color: colors.accentMuted,

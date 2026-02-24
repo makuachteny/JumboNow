@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Animated,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -42,7 +43,8 @@ import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { useTheme } from '../context/ThemeContext';
 import { CAMPUS_LOCATIONS, LOCATION_CATEGORIES } from '../data/campusLocations';
-import { DINING_LOCATIONS } from '../data/diningLocations';
+import { DINING_LOCATIONS, TYPE_LABELS } from '../data/diningLocations';
+import { diningService } from '../services/dining.service';
 import BottomNav from '../components/BottomNav';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -348,6 +350,10 @@ export default function MapScreen({ navigation, route }) {
   // ── Directions popup (Google Maps) ──
   const [directionsTarget, setDirectionsTarget] = useState(null);
 
+  // ── Dining detail state ──
+  const [diningSchools, setDiningSchools] = useState([]);
+  const [selectedDiningLocation, setSelectedDiningLocation] = useState(null);
+
   const mapRef = useRef(null);
   const busInterval = useRef(null);
   const pathCache = useRef({});
@@ -364,21 +370,45 @@ export default function MapScreen({ navigation, route }) {
   }, []);
 
   // ─── Campus helpers ─────────────────────────────────────────────
+  const diningMapLocations = useMemo(() => {
+    return DINING_LOCATIONS.filter(d => d.lat && d.lng).map(d => ({
+      id: `dining-${d.slug}`,
+      name: d.name,
+      lat: d.lat,
+      lng: d.lng,
+      category: 'dining',
+      description: d.description || '',
+      emoji: d.emoji,
+      slug: d.slug,
+      image: d.image,
+      type: d.type,
+    }));
+  }, []);
+
   const categoryFiltered = useMemo(() => {
     if (activeCategory === 'all') return CAMPUS_LOCATIONS;
+    if (activeCategory === 'dining') return diningMapLocations;
     return CAMPUS_LOCATIONS.filter((loc) => loc.category === activeCategory);
-  }, [activeCategory]);
+  }, [activeCategory, diningMapLocations]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return CAMPUS_LOCATIONS.filter(
+    const campusResults = CAMPUS_LOCATIONS.filter(
+      (loc) =>
+        loc.category !== 'dining' &&
+        (loc.name.toLowerCase().includes(q) ||
+        loc.description.toLowerCase().includes(q) ||
+        loc.category.toLowerCase().includes(q))
+    );
+    const diningResults = diningMapLocations.filter(
       (loc) =>
         loc.name.toLowerCase().includes(q) ||
-        loc.description.toLowerCase().includes(q) ||
-        loc.category.toLowerCase().includes(q)
+        (loc.description && loc.description.toLowerCase().includes(q)) ||
+        (TYPE_LABELS[loc.type] || '').toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+    return [...campusResults, ...diningResults];
+  }, [searchQuery, diningMapLocations]);
 
   const displayedLocations = searchQuery.trim() ? searchResults : categoryFiltered;
 
@@ -399,10 +429,51 @@ export default function MapScreen({ navigation, route }) {
       setSearchQuery('');
       setSearchFocused(false);
       Keyboard.dismiss();
-      handleMarkerPress(location);
+      if (location.slug) {
+        handleDiningMarkerPress(location);
+      } else {
+        handleMarkerPress(location);
+      }
     },
     [handleMarkerPress]
   );
+
+  const getDiningStatus = useCallback((slug) => {
+    if (!diningSchools.length) return null;
+    const school = diningSchools.find(s => s.slug === slug);
+    if (!school) return null;
+    const isOpen = diningService.isOpenNow(school);
+    const dayPrefixes = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const prefix = dayPrefixes[new Date().getDay()];
+    const startStr = school[`${prefix}_start`];
+    const endStr = school[`${prefix}_end`];
+    const enabled = school[`${prefix}_enabled`];
+    let hours = null;
+    if (enabled !== false && startStr && endStr) {
+      const formatTime = (t) => {
+        const [h, m] = t.split(':');
+        const hr = parseInt(h, 10);
+        const ampm = hr >= 12 ? 'PM' : 'AM';
+        const hr12 = hr > 12 ? hr - 12 : hr === 0 ? 12 : hr;
+        return `${hr12}:${m} ${ampm}`;
+      };
+      hours = `${formatTime(startStr)} - ${formatTime(endStr)}`;
+    }
+    return { isOpen, hours, enabled };
+  }, [diningSchools]);
+
+  const handleDiningMarkerPress = useCallback((location) => {
+    setSelectedDiningLocation(location);
+    setSelectedLocation(null);
+    setDirectionsTarget(null);
+    setSearchFocused(false);
+    setSearchQuery('');
+    Keyboard.dismiss();
+    mapRef.current?.animateToRegion(
+      { latitude: location.lat, longitude: location.lng, latitudeDelta: 0.003, longitudeDelta: 0.003 },
+      300
+    );
+  }, []);
 
   // ─── Shuttle helpers ────────────────────────────────────────────
   const loadShuttleData = useCallback(async (isRefresh = false) => {
@@ -500,6 +571,13 @@ export default function MapScreen({ navigation, route }) {
       if (busInterval.current) clearInterval(busInterval.current);
     };
   }, [loadShuttleData, refreshBuses]);
+
+  // Fetch dining school data (hours, open/closed status)
+  useEffect(() => {
+    diningService.getSchools().then(data => {
+      setDiningSchools(Array.isArray(data) ? data : []);
+    }).catch(() => {});
+  }, []);
 
   // Handle focusLocation param from EventDetail navigation — start directions immediately
   useEffect(() => {
@@ -687,6 +765,7 @@ export default function MapScreen({ navigation, route }) {
     setSelectedLocation(null);
     setSelectedStop(null);
     setDirectionsTarget(null);
+    setSelectedDiningLocation(null);
     cancelNavigation();
   }, [cancelNavigation]);
 
@@ -697,6 +776,7 @@ export default function MapScreen({ navigation, route }) {
       setSelectedLocation(null);
       setSelectedStop(null);
       setDirectionsTarget(null);
+      setSelectedDiningLocation(null);
       setSearchQuery('');
       setSearchFocused(false);
       cancelNavigation();
@@ -796,14 +876,20 @@ export default function MapScreen({ navigation, route }) {
           showsPointsOfInterest
           showsBuildings
           showsIndoors
-          onPress={() => {
-            if (directionsTarget) {
+          onPress={(e) => {
+            const { latitude, longitude } = e.nativeEvent.coordinate;
+            if (directionsTarget || selectedDiningLocation) {
               setDirectionsTarget(null);
               setSelectedLocation(null);
               setSelectedStop(null);
-            } else {
-              toggleUI();
+              setSelectedDiningLocation(null);
             }
+            mapRef.current?.animateToRegion({
+              latitude,
+              longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            }, 400);
           }}
         >
           {/* Walking navigation path */}
@@ -831,13 +917,14 @@ export default function MapScreen({ navigation, route }) {
           {/* Campus markers — all buildings in campus mode */}
           {mode === 'campus' &&
             displayedLocations.map((loc) => {
-              const traffic = getTrafficLevel(loc);
+              const isDining = !!loc.slug;
+              const traffic = !isDining ? getTrafficLevel(loc) : null;
               const isBusy = traffic && traffic.level >= 50;
               return (
                 <Marker
                   key={`loc-${loc.id}`}
                   coordinate={{ latitude: loc.lat, longitude: loc.lng }}
-                  onPress={() => handleMarkerPress(loc)}
+                  onPress={() => isDining ? handleDiningMarkerPress(loc) : handleMarkerPress(loc)}
                   anchor={{ x: 0.5, y: traffic ? 0.5 : 1 }}
                 >
                   {traffic ? (
@@ -1031,6 +1118,7 @@ export default function MapScreen({ navigation, route }) {
                     setActiveCategory(cat.id);
                     setSelectedLocation(null);
                     setDirectionsTarget(null);
+                    setSelectedDiningLocation(null);
                   }}
                 >
                   <Icon size={14} color={isActive ? '#FFF' : '#374151'} strokeWidth={isActive ? 2.5 : 2} />
@@ -1130,7 +1218,7 @@ export default function MapScreen({ navigation, route }) {
             </View>
             <View style={styles.busPopupMeta}>
               <View style={styles.busPopupMetaItem}>
-                <View style={[styles.liveDotSmall, { backgroundColor: '#22C55E' }]} />
+                <View style={[styles.liveDotSmall, { backgroundColor: colors.success }]} />
                 <Text style={styles.busPopupMetaText}>Live</Text>
               </View>
               {speed > 0 && (
@@ -1204,7 +1292,7 @@ export default function MapScreen({ navigation, route }) {
       )}
 
       {/* ─── Directions popup (Google Maps) ─── */}
-      {directionsTarget && !navigating && (
+      {directionsTarget && !navigating && !selectedDiningLocation && (
         <View style={[styles.directionsCard, { paddingBottom: Math.max(insets.bottom, 20) }]}>
           <View style={styles.dragHandle} />
           <View style={styles.directionsHeader}>
@@ -1231,8 +1319,8 @@ export default function MapScreen({ navigation, route }) {
               <Text style={styles.dirModeLabel}>Walk</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dirModeBtn} onPress={() => openDirections('transit')}>
-              <View style={[styles.dirModeIcon, { backgroundColor: '#22C55E15' }]}>
-                <Bus size={22} color="#22C55E" />
+              <View style={[styles.dirModeIcon, { backgroundColor: colors.success + '15' }]}>
+                <Bus size={22} color={colors.success} />
               </View>
               <Text style={styles.dirModeLabel}>Transit</Text>
             </TouchableOpacity>
@@ -1282,9 +1370,9 @@ export default function MapScreen({ navigation, route }) {
               <View style={styles.schedulePanelHeaderInfo}>
                 <Text style={styles.schedulePanelTitle}>{selectedRoute.name}</Text>
                 <View style={styles.schedulePanelBadgeRow}>
-                  <View style={[styles.schedulePanelBusCountBadge, { backgroundColor: activeBusCount > 0 ? '#22C55E18' : '#EF444418' }]}>
-                    <Bus size={12} color={activeBusCount > 0 ? '#22C55E' : '#EF4444'} />
-                    <Text style={[styles.schedulePanelBusCountText, { color: activeBusCount > 0 ? '#22C55E' : '#EF4444' }]}>
+                  <View style={[styles.schedulePanelBusCountBadge, { backgroundColor: activeBusCount > 0 ? colors.success + '18' : '#EF444418' }]}>
+                    <Bus size={12} color={activeBusCount > 0 ? colors.success : '#EF4444'} />
+                    <Text style={[styles.schedulePanelBusCountText, { color: activeBusCount > 0 ? colors.success : '#EF4444' }]}>
                       {activeBusCount} active {activeBusCount === 1 ? 'bus' : 'buses'}
                     </Text>
                   </View>
@@ -1377,7 +1465,77 @@ export default function MapScreen({ navigation, route }) {
         </View>
       )}
 
-      <BottomNav navigation={navigation} activeTab="Map" visible={uiVisible && !directionsTarget && !navigating} />
+      {/* ─── Dining detail bottom sheet ─── */}
+      {selectedDiningLocation && !navigating && (() => {
+        const status = getDiningStatus(selectedDiningLocation.slug);
+        return (
+          <View style={[styles.diningDetailCard, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <View style={styles.dragHandle} />
+            <Image source={{ uri: selectedDiningLocation.image }} style={styles.diningDetailImage} />
+            <View style={styles.diningDetailInfo}>
+              <View style={styles.diningDetailHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.diningDetailName}>{selectedDiningLocation.name}</Text>
+                  <View style={styles.diningDetailMeta}>
+                    <View style={styles.diningTypeBadge}>
+                      <UtensilsCrossed size={11} color="#F59E0B" />
+                      <Text style={styles.diningTypeText}>{TYPE_LABELS[selectedDiningLocation.type] || selectedDiningLocation.type}</Text>
+                    </View>
+                    {status && status.isOpen !== null && (
+                      <View style={[styles.diningStatusBadge, { backgroundColor: status.isOpen ? colors.success + '15' : '#EF444415' }]}>
+                        <View style={[styles.diningStatusDot, { backgroundColor: status.isOpen ? colors.success : '#EF4444' }]} />
+                        <Text style={[styles.diningStatusText, { color: status.isOpen ? '#16A34A' : '#DC2626' }]}>
+                          {status.isOpen ? 'Open' : 'Closed'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.cardClose}
+                  onPress={() => setSelectedDiningLocation(null)}
+                >
+                  <X size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
+              {status?.hours && (
+                <View style={styles.diningHoursRow}>
+                  <Clock size={14} color="#6B7280" />
+                  <Text style={styles.diningHoursText}>{status.hours}</Text>
+                </View>
+              )}
+              {selectedDiningLocation.description ? (
+                <Text style={styles.diningDetailDesc}>{selectedDiningLocation.description}</Text>
+              ) : null}
+              <View style={styles.diningDetailButtons}>
+                <TouchableOpacity
+                  style={styles.diningMenuBtn}
+                  onPress={() => {
+                    const loc = selectedDiningLocation;
+                    setSelectedDiningLocation(null);
+                    navigation.navigate('DiningMenu', { slug: loc.slug, name: loc.name });
+                  }}
+                >
+                  <UtensilsCrossed size={16} color="#FFF" />
+                  <Text style={styles.diningMenuBtnText}>View Menu</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.diningDirBtn}
+                  onPress={() => {
+                    const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedDiningLocation.lat},${selectedDiningLocation.lng}&travelmode=walking`;
+                    Linking.openURL(url);
+                  }}
+                >
+                  <Navigation size={16} color="#418FDE" />
+                  <Text style={styles.diningDirBtnText}>Directions</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        );
+      })()}
+
+      <BottomNav navigation={navigation} activeTab="Map" visible={uiVisible && !directionsTarget && !navigating && !selectedDiningLocation} />
     </View>
   );
 }
@@ -1433,7 +1591,7 @@ const createStyles = (colors) =>
     shuttleTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     shuttleTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E' },
     liveRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-    liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+    liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
     liveText: { fontSize: 11, fontWeight: '500', color: '#6B7280' },
     actionBtn: {
       width: 44,
@@ -1476,7 +1634,7 @@ const createStyles = (colors) =>
     modeBtnText: { fontSize: 13, fontWeight: '600', color: '#374151' },
     modeBtnTextActive: { color: '#FFF' },
     busLiveBadge: {
-      backgroundColor: '#22C55E',
+      backgroundColor: colors.success,
       borderRadius: 8,
       paddingHorizontal: 5,
       paddingVertical: 1,
@@ -1821,8 +1979,8 @@ const createStyles = (colors) =>
     busInfoRoute: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
     busInfoName: { fontSize: 12, fontWeight: '400', color: '#6B7280', marginTop: 1 },
     busInfoLive: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    liveDotSmall: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
-    busInfoLiveText: { fontSize: 11, fontWeight: '600', color: '#22C55E' },
+    liveDotSmall: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
+    busInfoLiveText: { fontSize: 11, fontWeight: '600', color: colors.success },
 
     // Error & no-bus
     errorBar: {
@@ -2103,4 +2261,130 @@ const createStyles = (colors) =>
       borderRadius: 8,
     },
     webLocTrafficText: { fontSize: 11, fontWeight: '700' },
+
+    // Dining detail bottom sheet
+    diningDetailCard: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: '#FFFFFFF8',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
+      elevation: 10,
+    },
+    diningDetailImage: {
+      width: '100%',
+      height: 140,
+      borderRadius: 16,
+      backgroundColor: '#F3F4F6',
+      marginBottom: 14,
+    },
+    diningDetailInfo: {
+      gap: 10,
+    },
+    diningDetailHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+    },
+    diningDetailName: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: '#1A1A2E',
+    },
+    diningDetailMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 6,
+    },
+    diningTypeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: '#F59E0B15',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 8,
+    },
+    diningTypeText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#B45309',
+    },
+    diningStatusBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 8,
+    },
+    diningStatusDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+    },
+    diningStatusText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    diningHoursRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    diningHoursText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: '#6B7280',
+    },
+    diningDetailDesc: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: '#6B7280',
+    },
+    diningDetailButtons: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 4,
+      marginBottom: 8,
+    },
+    diningMenuBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      borderRadius: 14,
+      backgroundColor: '#F59E0B',
+    },
+    diningMenuBtnText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: '#FFF',
+    },
+    diningDirBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      borderRadius: 14,
+      backgroundColor: '#418FDE15',
+    },
+    diningDirBtnText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: '#418FDE',
+    },
   });

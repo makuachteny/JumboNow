@@ -2,7 +2,6 @@ import React, { useRef, useEffect } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommonActions } from '@react-navigation/native';
-import { BlurView } from 'expo-blur';
 import { Calendar, Users, Map, Ticket, User } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
@@ -49,15 +48,9 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ translateY: slideUp }], opacity: hideAnim, pointerEvents: visible ? 'auto' : 'none' }]}>
       {Platform.OS === 'ios' ? (
-        <BlurView
-          intensity={colors.blurIntensity}
-          tint={colors.blurTint}
-          style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}
+        <View
+          style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8), backgroundColor: colors.background }]}
         >
-          <View style={[styles.glassOverlay, {
-            backgroundColor: colors.glass,
-            borderTopColor: colors.glassBorder,
-          }]} />
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             const { Icon } = tab;
@@ -101,13 +94,12 @@ export default function BottomNav({ navigation, activeTab, visible = true }) {
               </TouchableOpacity>
             );
           })}
-        </BlurView>
+        </View>
       ) : (
         <View
           style={[styles.container, styles.androidNav, {
             paddingBottom: Math.max(insets.bottom, 8),
-            backgroundColor: colors.surface,
-            borderTopColor: colors.glassBorder,
+            backgroundColor: colors.background,
           }]}
         >
           {tabs.map((tab) => {
@@ -172,12 +164,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   androidNav: {
-    borderTopWidth: StyleSheet.hairlineWidth,
     elevation: 8,
-  },
-  glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
   tab: {
     alignItems: 'center',

@@ -51,7 +51,7 @@ const EVENT_ICONS = [
 ];
 
 const GRADIENT_PRESETS = [
-  { colors: ['#6AADE4', '#418FDE', '#3579C6'], primary: '#6AADE4' },
+  { colors: ['#5BA3E0', '#418FDE', '#3579C6'], primary: '#418FDE' },
   { colors: ['#EC4899', '#F43F5E', '#DC2626'], primary: '#EC4899' },
   { colors: ['#A78BFA', '#8B5CF6', '#D946EF'], primary: '#A78BFA' },
   { colors: ['#34D399', '#10B981', '#059669'], primary: '#34D399' },

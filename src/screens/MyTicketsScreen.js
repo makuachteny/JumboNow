@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -25,8 +25,11 @@ import {
   XCircle,
   Star,
   Trash2,
+  Download,
 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
+import ViewShot, { captureRef } from 'react-native-view-shot';
+import * as MediaLibrary from 'expo-media-library';
 import { ticketsService } from '../services/tickets.service';
 import { useTheme } from '../context/ThemeContext';
 import { withOpacity } from '../utils/safeColor';
@@ -46,6 +49,24 @@ export default function MyTicketsScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [ratingsState, setRatingsState] = useState({});
   const [expandedQr, setExpandedQr] = useState(null);
+  const qrRefs = useRef({});
+
+  const handleDownloadQr = useCallback(async (ticketId) => {
+    try {
+      const ref = qrRefs.current[ticketId];
+      if (!ref) return;
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to save tickets.');
+        return;
+      }
+      const uri = await captureRef(ref, { format: 'png', quality: 1 });
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert('Saved!', 'Ticket QR code saved to your photo library.');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to save QR code.');
+    }
+  }, []);
 
   const fetchTickets = useCallback(async () => {
     try {
@@ -258,29 +279,41 @@ export default function MyTicketsScreen({ navigation }) {
           </TouchableOpacity>
 
           {expandedQr === ticket.id && (
-            <View style={styles.qrExpandedSection}>
-              <View style={styles.qrCodeContainer}>
-                <QRCode
-                  value={`jumbonow://ticket/${ticket.confirmation_code}`}
-                  size={140}
-                  backgroundColor="#FFFFFF"
-                  color="#0B1A2E"
-                  quietZone={10}
-                />
+            <ViewShot ref={(r) => { qrRefs.current[ticket.id] = r; }} options={{ format: 'png', quality: 1 }}>
+              <View style={styles.qrExpandedSection}>
+                <View style={styles.qrCodeContainer}>
+                  <QRCode
+                    value={`jumbonow://ticket/${ticket.confirmation_code}`}
+                    size={140}
+                    backgroundColor="#FFFFFF"
+                    color="#0B1A2E"
+                    quietZone={10}
+                  />
+                </View>
+                <Text style={styles.qrHintText}>Scan at entry for check-in</Text>
+                <View style={styles.qrActionsRow}>
+                  <TouchableOpacity
+                    style={styles.copyCodeBtn}
+                    onPress={async () => {
+                      await Clipboard.setStringAsync(ticket.confirmation_code);
+                      Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
+                    }}
+                    accessibilityLabel="Copy confirmation code"
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.copyCodeBtnText}>Copy Code</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDownloadQr(ticket.id)}
+                    accessibilityLabel="Save QR code to photos"
+                    accessibilityRole="button"
+                    style={styles.downloadIcon}
+                  >
+                    <Download size={20} color={colors.accent} />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <Text style={styles.qrHintText}>Scan at entry for check-in</Text>
-              <TouchableOpacity
-                style={styles.copyCodeBtn}
-                onPress={async () => {
-                  await Clipboard.setStringAsync(ticket.confirmation_code);
-                  Alert.alert('Copied!', 'Confirmation code copied to clipboard.');
-                }}
-                accessibilityLabel="Copy confirmation code"
-                accessibilityRole="button"
-              >
-                <Text style={styles.copyCodeBtnText}>Copy Code</Text>
-              </TouchableOpacity>
-            </View>
+            </ViewShot>
           )}
 
           <View style={styles.ticketFooter}>
@@ -394,7 +427,7 @@ export default function MyTicketsScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  }, [colors, styles, activeTab, navigation, handleCancel, handleDelete, statusColors, ratingsState, handleStarPress, handleFeedbackChange, handleSubmitRating, expandedQr]);
+  }, [colors, styles, activeTab, navigation, handleCancel, handleDelete, statusColors, ratingsState, handleStarPress, handleFeedbackChange, handleSubmitRating, expandedQr, handleDownloadQr]);
 
   const ListEmpty = () => {
     if (loading) return <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />;
@@ -526,8 +559,10 @@ const createStyles = (colors) => StyleSheet.create({
   qrExpandedSection: { alignItems: 'center', paddingTop: 14, gap: 10 },
   qrCodeContainer: { padding: 10, borderRadius: 14, backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
   qrHintText: { color: colors.textTertiary, fontSize: 12, fontWeight: '600' },
+  qrActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   copyCodeBtn: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 10, backgroundColor: colors.accentBg, borderWidth: 1, borderColor: colors.accentBorder },
   copyCodeBtnText: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+  downloadIcon: { padding: 6 },
   // Footer
   ticketFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 },
   footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },

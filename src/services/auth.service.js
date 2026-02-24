@@ -1,6 +1,21 @@
 import { supabase } from '../config/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+let _demoProfile = null;
 
 export const authService = {
+  setDemoMode(profile) {
+    _demoProfile = profile;
+  },
+
+  clearDemoMode() {
+    _demoProfile = null;
+  },
+
+  isDemoMode() {
+    return !!_demoProfile;
+  },
+
   async signUp({ email, password, username, graduationYear, accountType }) {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -45,6 +60,13 @@ export const authService = {
   },
 
   async signOut() {
+    if (_demoProfile) {
+      _demoProfile = null;
+      await AsyncStorage.removeItem('jumbonow_demo_mode');
+      await AsyncStorage.removeItem('jumbonow_demo_role');
+      return;
+    }
+
     // Clean up device tokens before signing out
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -63,12 +85,14 @@ export const authService = {
   },
 
   async getSession() {
+    if (_demoProfile) return { user: { id: _demoProfile.id, email: _demoProfile.email } };
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) throw error;
     return session;
   },
 
   async isEmailConfirmed() {
+    if (_demoProfile) return true;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
     return !!user.email_confirmed_at;
@@ -83,6 +107,7 @@ export const authService = {
   },
 
   async getCurrentProfile() {
+    if (_demoProfile) return _demoProfile;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -96,6 +121,7 @@ export const authService = {
   },
 
   async getFriendCount() {
+    if (_demoProfile) return _demoProfile.account_type === 'club' ? 156 : _demoProfile.account_type === 'staff' ? 42 : 23;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return 0;
 
@@ -107,6 +133,10 @@ export const authService = {
   },
 
   async updateProfile(updates) {
+    if (_demoProfile) {
+      Object.assign(_demoProfile, updates);
+      return _demoProfile;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 

@@ -49,12 +49,14 @@ import {
   Bus,
   Pizza,
   ExternalLink,
+  Users,
 } from 'lucide-react-native';
 import { authService } from '../services/auth.service';
 import { storageService } from '../services/storage.service';
 import { ticketsService } from '../services/tickets.service';
 import { achievementsService } from '../services/achievements.service';
 import { eventsService } from '../services/events.service';
+import { useDemo } from '../context/DemoContext';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import SmartIcon from '../components/SmartIcon';
@@ -68,7 +70,7 @@ const defaultProfile = {
   bio: '',
   graduation_year: '',
   avatar_url: null,
-  avatar_color: '#6AADE4',
+  avatar_color: '#418FDE',
   is_verified: false,
   joined_date: '',
   events_attended: 0,
@@ -79,6 +81,7 @@ const defaultProfile = {
 export default function ProfileScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
+  const { isDemoMode, exitDemoMode } = useDemo();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [activeSection, setActiveSection] = useState('activity');
@@ -89,7 +92,7 @@ export default function ProfileScreen({ navigation }) {
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
   const [editGradYear, setEditGradYear] = useState('');
-  const [editAvatarColor, setEditAvatarColor] = useState('#6AADE4');
+  const [editAvatarColor, setEditAvatarColor] = useState('#418FDE');
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -122,7 +125,7 @@ export default function ProfileScreen({ navigation }) {
         setEditName(data.display_name || '');
         setEditUsername(data.username || '');
         setEditGradYear(data.graduation_year || '');
-        setEditAvatarColor(data.avatar_color || '#6AADE4');
+        setEditAvatarColor(data.avatar_color || '#418FDE');
         setEditMajor(data.major || '');
         setEditCampus(data.campus || '');
       }
@@ -293,17 +296,24 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: async () => {
-          await authService.signOut();
-          navigation.reset({ index: 0, routes: [{ name: 'Landing' }] });
+    Alert.alert(
+      isDemoMode ? 'Exit Demo' : 'Log Out',
+      isDemoMode ? 'Exit demo mode and return to the landing screen?' : 'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isDemoMode ? 'Exit Demo' : 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            if (isDemoMode) {
+              await exitDemoMode();
+            }
+            await authService.signOut();
+            navigation.reset({ index: 0, routes: [{ name: 'Landing' }] });
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   // Compute live stats
@@ -361,7 +371,7 @@ export default function ProfileScreen({ navigation }) {
               <>
                 <View style={styles.profileTop}>
                   <TouchableOpacity onPress={handlePickImage} activeOpacity={0.8} accessibilityLabel="Change profile picture" accessibilityRole="button">
-                    <View style={[styles.avatar, { backgroundColor: profile.avatar_color || '#6AADE4' }]}>
+                    <View style={[styles.avatar, { backgroundColor: profile.avatar_color || '#418FDE' }]}>
                       {profile.avatar_url ? (
                         <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
                       ) : (
@@ -389,6 +399,20 @@ export default function ProfileScreen({ navigation }) {
                       <Text style={styles.displayName}>{profile.display_name || profile.username}</Text>
                     </View>
                     <Text style={styles.username}>@{profile.username}</Text>
+                    {profile.account_type && (
+                      <View style={[styles.accountTypeBadge, {
+                        backgroundColor: profile.account_type === 'club' ? 'rgba(139,92,246,0.15)' :
+                          profile.account_type === 'staff' ? 'rgba(53,121,198,0.15)' : 'rgba(65,143,222,0.15)',
+                      }]}>
+                        <Text style={[styles.accountTypeBadgeText, {
+                          color: profile.account_type === 'club' ? '#8B5CF6' :
+                            profile.account_type === 'staff' ? '#3579C6' : '#418FDE',
+                        }]}>
+                          {profile.account_type === 'club' ? 'Club Account' :
+                            profile.account_type === 'staff' ? 'Staff Account' : 'Student'}
+                        </Text>
+                      </View>
+                    )}
                     <View style={styles.metaRow}>
                       {profile.graduation_year ? (
                         <View style={styles.metaItem}>
@@ -421,17 +445,27 @@ export default function ProfileScreen({ navigation }) {
             <TouchableOpacity style={[styles.statCard, activeSection === 'saved_events' && styles.statCardActive]} onPress={handleEventsStatPress} accessibilityLabel="View saved events" accessibilityRole="button">
               <Zap size={20} color={colors.accent} />
               <Text style={styles.statNumber}>{savedEventCount}</Text>
-              <Text style={styles.statLabel}>Events</Text>
+              <Text style={styles.statLabel}>{profile.account_type === 'club' ? 'Hosted' : 'Events'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate('MyTickets')} accessibilityLabel="View my tickets" accessibilityRole="button">
-              <Ticket size={20} color={colors.info} />
-              <Text style={[styles.statNumber, { color: colors.info }]}>{ticketCount}</Text>
-              <Text style={styles.statLabel}>Tickets</Text>
+            <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate(profile.account_type === 'club' ? 'Friends' : 'MyTickets')} accessibilityLabel={profile.account_type === 'club' ? 'View followers' : 'View my tickets'} accessibilityRole="button">
+              {profile.account_type === 'club' ? (
+                <>
+                  <Users size={20} color={colors.info} />
+                  <Text style={[styles.statNumber, { color: colors.info }]}>{friendCount}</Text>
+                  <Text style={styles.statLabel}>Followers</Text>
+                </>
+              ) : (
+                <>
+                  <Ticket size={20} color={colors.info} />
+                  <Text style={[styles.statNumber, { color: colors.info }]}>{ticketCount}</Text>
+                  <Text style={styles.statLabel}>Tickets</Text>
+                </>
+              )}
             </TouchableOpacity>
             <View style={styles.statCard}>
               <Star size={20} color={colors.warning} />
               <Text style={[styles.statNumber, { color: colors.warning }]}>{liveVibeScore}</Text>
-              <Text style={styles.statLabel}>Vibe</Text>
+              <Text style={styles.statLabel}>{profile.account_type === 'club' ? 'Rating' : 'Vibe'}</Text>
             </View>
           </View>
 
@@ -565,18 +599,24 @@ export default function ProfileScreen({ navigation }) {
                 <View style={styles.aboutRow}>
                   <BookOpen size={18} color={colors.accentMuted} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.aboutLabel}>Major</Text>
+                    <Text style={styles.aboutLabel}>
+                      {profile.account_type === 'club' ? 'Category' : profile.account_type === 'staff' ? 'Department' : 'Major'}
+                    </Text>
                     <Text style={styles.aboutValue}>{profile.major || 'Not set'}</Text>
                   </View>
                 </View>
-                <View style={styles.aboutDivider} />
-                <View style={styles.aboutRow}>
-                  <Calendar size={18} color={colors.accentMuted} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.aboutLabel}>Graduation Year</Text>
-                    <Text style={styles.aboutValue}>{profile.graduation_year || 'Not set'}</Text>
-                  </View>
-                </View>
+                {profile.account_type === 'student' && (
+                  <>
+                    <View style={styles.aboutDivider} />
+                    <View style={styles.aboutRow}>
+                      <Calendar size={18} color={colors.accentMuted} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.aboutLabel}>Graduation Year</Text>
+                        <Text style={styles.aboutValue}>{profile.graduation_year || 'Not set'}</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
                 <View style={styles.aboutDivider} />
                 <View style={styles.aboutRow}>
                   <MapPin size={18} color={colors.accentMuted} />
@@ -585,6 +625,20 @@ export default function ProfileScreen({ navigation }) {
                     <Text style={styles.aboutValue}>{profile.campus || 'Tufts University - Medford'}</Text>
                   </View>
                 </View>
+                {profile.account_type && profile.account_type !== 'student' && (
+                  <>
+                    <View style={styles.aboutDivider} />
+                    <View style={styles.aboutRow}>
+                      <Shield size={18} color={colors.accentMuted} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.aboutLabel}>Account Type</Text>
+                        <Text style={styles.aboutValue}>
+                          {profile.account_type === 'club' ? 'Registered Club / Organization' : 'University Staff / Faculty'}
+                        </Text>
+                      </View>
+                    </View>
+                  </>
+                )}
               </View>
             </View>
           )}
@@ -656,13 +710,15 @@ export default function ProfileScreen({ navigation }) {
               maxLength={4}
             />
 
-            <Text style={styles.inputLabel}>Major</Text>
+            <Text style={styles.inputLabel}>
+              {profile.account_type === 'club' ? 'Category' : profile.account_type === 'staff' ? 'Department' : 'Major'}
+            </Text>
             <TextInput
               style={styles.modalInput}
               value={editMajor}
               onChangeText={setEditMajor}
               placeholderTextColor={colors.placeholder}
-              placeholder="e.g. Computer Science"
+              placeholder={profile.account_type === 'club' ? 'e.g. Engineering, Arts' : profile.account_type === 'staff' ? 'e.g. Computer Science Department' : 'e.g. Computer Science'}
             />
 
             <Text style={styles.inputLabel}>Campus</Text>
@@ -689,7 +745,7 @@ export default function ProfileScreen({ navigation }) {
 
             <Text style={styles.inputLabel}>Avatar Color</Text>
             <View style={styles.colorPicker}>
-              {['#6AADE4', '#3B82F6', '#6366F1', '#8B5CF6', '#7EC4F0', '#A8B8C8', '#EF4444', '#F59E0B', '#22C55E', '#3579C6'].map((color) => (
+              {['#418FDE', '#3B82F6', '#6366F1', '#8B5CF6', '#7EC4F0', '#A8B8C8', '#EF4444', '#F59E0B', '#22C55E', '#3579C6'].map((color) => (
                 <TouchableOpacity
                   key={color}
                   style={[
@@ -785,7 +841,7 @@ export default function ProfileScreen({ navigation }) {
 
                   <TouchableOpacity style={styles.settingsItem} onPress={() => setSettingsPage('terms')} accessibilityLabel="Terms of Service" accessibilityRole="button">
                     <View style={styles.settingsItemLeft}>
-                      <View style={[styles.settingsIcon, { backgroundColor: 'rgba(106,173,228,0.1)' }]}>
+                      <View style={[styles.settingsIcon, { backgroundColor: 'rgba(65,143,222,0.1)' }]}>
                         <FileText size={18} color={colors.accent} />
                       </View>
                       <Text style={styles.settingsText}>Terms of Service</Text>
@@ -804,9 +860,9 @@ export default function ProfileScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} accessibilityLabel="Log out" accessibilityRole="button">
+                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} accessibilityLabel={isDemoMode ? 'Exit demo' : 'Log out'} accessibilityRole="button">
                   <LogOut size={18} color={colors.error} />
-                  <Text style={styles.logoutText}>Log Out</Text>
+                  <Text style={styles.logoutText}>{isDemoMode ? 'Exit Demo' : 'Log Out'}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1231,7 +1287,18 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.textTertiary,
     fontSize: 13,
     marginTop: 2,
-    marginBottom: 6,
+    marginBottom: 4,
+  },
+  accountTypeBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  accountTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   metaRow: {
     flexDirection: 'row',

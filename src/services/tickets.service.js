@@ -1,18 +1,41 @@
 import { supabase } from '../config/supabase';
+import { authService } from './auth.service';
 
 function generateConfirmationCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
   let result = '';
   for (let i = 0; i < 8; i++) {
-    result += chars.charAt(bytes[i] % chars.length);
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
 }
 
+// In-memory demo reservations
+let _demoReservations = [];
+let _demoEvents = [];
+
 export const ticketsService = {
+  setDemoEvents(events) { _demoEvents = events; },
+
   async reserveEvent(eventId) {
+    if (authService.isDemoMode()) {
+      const existing = _demoReservations.find(r => r.event_id === eventId && r.status !== 'cancelled');
+      if (existing) throw new Error('You already have a reservation for this event.');
+      const code = generateConfirmationCode();
+      const reservation = {
+        id: `demo-res-${Date.now()}`,
+        event_id: eventId,
+        user_id: 'demo-user',
+        status: 'confirmed',
+        reservation_type: 'free_rsvp',
+        ticket_type: 'general',
+        price_paid: 0,
+        confirmation_code: code,
+        purchased_at: new Date().toISOString(),
+      };
+      _demoReservations.push(reservation);
+      return reservation;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -52,6 +75,24 @@ export const ticketsService = {
   },
 
   async purchaseTicket(eventId, ticketType, price) {
+    if (authService.isDemoMode()) {
+      const existing = _demoReservations.find(r => r.event_id === eventId && r.status !== 'cancelled');
+      if (existing) throw new Error('You already have a ticket for this event.');
+      const code = generateConfirmationCode();
+      const reservation = {
+        id: `demo-res-${Date.now()}`,
+        event_id: eventId,
+        user_id: 'demo-user',
+        status: 'confirmed',
+        reservation_type: 'ticket_purchase',
+        ticket_type: ticketType,
+        price_paid: price,
+        confirmation_code: code,
+        purchased_at: new Date().toISOString(),
+      };
+      _demoReservations.push(reservation);
+      return reservation;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -91,6 +132,11 @@ export const ticketsService = {
   },
 
   async cancelReservation(reservationId) {
+    if (authService.isDemoMode()) {
+      const r = _demoReservations.find(r => r.id === reservationId);
+      if (r) r.status = 'cancelled';
+      return r || { id: reservationId, status: 'cancelled' };
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -106,6 +152,10 @@ export const ticketsService = {
   },
 
   async deleteReservation(reservationId) {
+    if (authService.isDemoMode()) {
+      _demoReservations = _demoReservations.filter(r => r.id !== reservationId);
+      return;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -118,6 +168,14 @@ export const ticketsService = {
   },
 
   async getMyTickets() {
+    if (authService.isDemoMode()) {
+      return _demoReservations
+        .filter(r => r.status !== 'cancelled')
+        .map(r => {
+          const event = _demoEvents.find(e => e.id === r.event_id) || null;
+          return { ...r, event };
+        });
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -134,6 +192,11 @@ export const ticketsService = {
   },
 
   async getEventAttendees(eventId) {
+    if (authService.isDemoMode()) {
+      return _demoReservations
+        .filter(r => r.event_id === eventId && r.status !== 'cancelled')
+        .map(r => ({ ...r, profile: { id: r.user_id, username: 'demo_user', display_name: 'Demo User' } }));
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -176,6 +239,9 @@ export const ticketsService = {
   },
 
   async getReservationForEvent(eventId) {
+    if (authService.isDemoMode()) {
+      return _demoReservations.find(r => r.event_id === eventId && r.status !== 'cancelled') || null;
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -190,6 +256,11 @@ export const ticketsService = {
   },
 
   async submitRating(reservationId, rating, feedback) {
+    if (authService.isDemoMode()) {
+      const r = _demoReservations.find(r => r.id === reservationId);
+      if (r) { r.rating = rating; r.feedback = feedback; r.rated_at = new Date().toISOString(); }
+      return r || { id: reservationId, rating, feedback };
+    }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -205,6 +276,7 @@ export const ticketsService = {
   },
 
   async getMyAverageRating() {
+    if (authService.isDemoMode()) return 4.2;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return 0;
 
@@ -221,6 +293,9 @@ export const ticketsService = {
   },
 
   async getSession() {
+    if (authService.isDemoMode()) {
+      return { data: { session: { access_token: 'demo-token' } } };
+    }
     return supabase.auth.getSession();
   },
 
@@ -230,6 +305,9 @@ export const ticketsService = {
   },
 
   subscribeToReservations(callback) {
+    if (authService.isDemoMode()) {
+      return { unsubscribe: () => {} };
+    }
     return supabase
       .channel('reservations-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'event_reservations' }, callback)

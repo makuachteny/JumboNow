@@ -23,7 +23,7 @@ export const groupChatService = {
       groupId: conv.group?.id,
       name: conv.group?.name || 'Group',
       icon: conv.group?.icon || '\uD83D\uDC65',
-      color: conv.group?.color || '#6AADE4',
+      color: conv.group?.color || '#418FDE',
       ownerId: conv.group?.owner_id,
       memberCount: conv.group?.members?.length || 0,
       lastMessage: conv.last_message_text,

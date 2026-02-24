@@ -872,7 +872,7 @@ const createStyles = (colors) => StyleSheet.create({
   topBarTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topBarTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A2E' },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
   liveText: { fontSize: 11, fontWeight: '500', color: '#6B7280' },
   refreshBtn: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFFEE',
@@ -936,7 +936,7 @@ const createStyles = (colors) => StyleSheet.create({
   trackingSub: { fontSize: 12, fontWeight: '400', color: '#6B7280', marginTop: 1 },
   trackingMeta: { alignItems: 'center', gap: 2 },
   trackingLiveRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  trackingLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  trackingLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
   trackingSpeed: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
 
   timeline: { marginTop: 14, paddingBottom: 2 },
@@ -995,8 +995,8 @@ const createStyles = (colors) => StyleSheet.create({
   busRowRoute: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1A1A2E' },
   busRowName: { fontSize: 12, fontWeight: '400', color: '#6B7280' },
   busRowLive: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 4 },
-  busRowLiveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#22C55E' },
-  busRowLiveText: { fontSize: 10, fontWeight: '600', color: '#22C55E' },
+  busRowLiveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.success },
+  busRowLiveText: { fontSize: 10, fontWeight: '600', color: colors.success },
 
   // Empty / loading states
   panelEmpty: {

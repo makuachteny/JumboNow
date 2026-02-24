@@ -10,63 +10,63 @@ const THEME_KEY = '@jumbo_now_theme';
 const darkColors = {
   // Deep navy base — dark but with blue warmth
   background: '#060D17',
-  backgroundGradient: ['#060D17', '#0A1525', '#0E1C30'],
-  headerBg: '#081220',
+  backgroundGradient: ['#060D17', '#060D17', '#060D17'],
+  headerBg: '#060D17',
 
   // Surfaces — blue-tinted, blends with the navy base
-  surface: 'rgba(106,173,228,0.06)',
-  surfaceAlt: 'rgba(106,173,228,0.04)',
+  surface: 'rgba(65,143,222,0.06)',
+  surfaceAlt: 'rgba(65,143,222,0.04)',
 
   // Cards — slightly lifted with cool blue tone
-  card: 'rgba(106,173,228,0.07)',
-  cardBorder: 'rgba(106,173,228,0.10)',
+  card: 'rgba(65,143,222,0.07)',
+  cardBorder: 'rgba(65,143,222,0.10)',
 
   // Glass — frosted blue feel
-  glass: 'rgba(106,173,228,0.06)',
-  glassBorder: 'rgba(106,173,228,0.09)',
-  glassLight: 'rgba(106,173,228,0.07)',
+  glass: 'rgba(65,143,222,0.06)',
+  glassBorder: 'rgba(65,143,222,0.09)',
+  glassLight: 'rgba(65,143,222,0.07)',
 
   blurTint: 'dark',
   blurIntensity: 80,
 
-  // Text hierarchy — crisp white on navy, soft blues for secondary
-  text: '#FFFFFF',
-  textSecondary: 'rgba(255,255,255,0.68)',
+  // Text hierarchy — soft white on navy, blue-tinted for secondary
+  text: '#E2E8F0',
+  textSecondary: 'rgba(226,232,240,0.72)',
   textTertiary: '#5A9FD4',
-  textMuted: 'rgba(255,255,255,0.32)',
+  textMuted: 'rgba(226,232,240,0.35)',
 
-  // Accent — vibrant blue for interactive elements
-  accent: '#6AADE4',
-  accentBg: 'rgba(106,173,228,0.10)',
-  accentBorder: 'rgba(106,173,228,0.18)',
-  accentMuted: 'rgba(106,173,228,0.30)',
-  buttonPrimary: '#418FDE',
+  // Accent — matches card text blue for consistency
+  accent: '#5A9FD4',
+  accentBg: 'rgba(90,159,212,0.12)',
+  accentBorder: 'rgba(90,159,212,0.20)',
+  accentMuted: 'rgba(90,159,212,0.35)',
+  buttonPrimary: '#5A9FD4',
   buttonText: '#FFFFFF',
 
   // Inputs — matches the blue-tinted surface
-  inputBg: 'rgba(106,173,228,0.05)',
-  inputBorder: 'rgba(106,173,228,0.09)',
-  inputFocusBorder: 'rgba(106,173,228,0.40)',
-  inputFocusBg: 'rgba(106,173,228,0.08)',
-  placeholder: 'rgba(90,159,212,0.40)',
+  inputBg: 'rgba(65,143,222,0.05)',
+  inputBorder: 'rgba(65,143,222,0.09)',
+  inputFocusBorder: 'rgba(65,143,222,0.40)',
+  inputFocusBg: 'rgba(65,143,222,0.08)',
+  placeholder: 'rgba(65,143,222,0.40)',
 
   // Status
   error: '#EF4444',
-  success: '#34D399',
+  success: '#22C55E',
   info: '#60A5FA',
   warning: '#FACC15',
 
   // Overlays
   overlay: 'rgba(4,8,16,0.92)',
   modalBg: 'rgba(6,13,23,0.97)',
-  divider: 'rgba(106,173,228,0.06)',
+  divider: 'rgba(65,143,222,0.06)',
   statusBarStyle: 'light-content',
 };
 
 const lightColors = {
   background: '#E8F4FD',
-  backgroundGradient: ['#E8F4FD', '#D6ECFA', '#C4E2F8'],
-  headerBg: '#D6ECFA',
+  backgroundGradient: ['#E8F4FD', '#E8F4FD', '#E8F4FD'],
+  headerBg: '#E8F4FD',
   surface: 'rgba(255,255,255,0.80)',
   surfaceAlt: 'rgba(255,255,255,0.60)',
   card: 'rgba(255,255,255,0.75)',

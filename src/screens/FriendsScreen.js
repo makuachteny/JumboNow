@@ -96,7 +96,7 @@ export default function FriendsScreen({ navigation }) {
     ...p,
     name: p.display_name || p.username,
     avatar: (p.display_name || p.username || 'AN').slice(0, 2).toUpperCase(),
-    avatarColor: p.avatar_color || '#6AADE4',
+    avatarColor: p.avatar_color || '#418FDE',
     year: p.graduation_year ? `'${p.graduation_year.slice(-2)}` : '',
     verified: p.is_verified || false,
     mutualFriends: 0,
@@ -176,7 +176,7 @@ export default function FriendsScreen({ navigation }) {
         id: c.id,
         name: c.otherUser?.display_name || c.otherUser?.username || 'User',
         initials: (c.otherUser?.display_name || c.otherUser?.username || 'U').slice(0, 2).toUpperCase(),
-        avatarColor: c.otherUser?.avatar_color || '#6AADE4',
+        avatarColor: c.otherUser?.avatar_color || '#418FDE',
         lastMessage: c.lastMessage,
         lastMessageAt: c.lastMessageAt,
         otherUser: c.otherUser,
@@ -191,7 +191,7 @@ export default function FriendsScreen({ navigation }) {
         id: `friend-${f.id}`,
         name: f.display_name || f.username || 'User',
         initials: (f.display_name || f.username || 'U').slice(0, 2).toUpperCase(),
-        avatarColor: f.avatar_color || '#6AADE4',
+        avatarColor: f.avatar_color || '#418FDE',
         lastMessage: 'Tap to start chatting',
         lastMessageAt: null,
         otherUser: f,
@@ -331,7 +331,7 @@ export default function FriendsScreen({ navigation }) {
           memberCount: item.memberCount,
         })}
       >
-        <View style={[styles.groupAvatarSquare, { backgroundColor: (item.color || '#6AADE4') + '20' }]}>
+        <View style={[styles.groupAvatarSquare, { backgroundColor: (item.color || '#418FDE') + '20' }]}>
           <Text style={styles.groupAvatarIcon}>{item.icon || '\uD83D\uDC65'}</Text>
         </View>
         <View style={styles.chatContent}>

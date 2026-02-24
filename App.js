@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { supabase } from './src/config/supabase';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { DemoProvider, useDemo } from './src/context/DemoContext';
 
 // Eager: only the screens needed at cold start
 import LandingScreen from './src/screens/LandingScreen';
@@ -111,6 +112,7 @@ const ebStyles = StyleSheet.create({
 
 function AppNavigator() {
   const { colors } = useTheme();
+  const { isDemoMode, enterDemoMode } = useDemo();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [onboardingDone, setOnboardingDone] = useState(false);
@@ -121,6 +123,13 @@ function AppNavigator() {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
+
+      // Restore demo mode if it was active
+      const demoMode = await AsyncStorage.getItem('jumbonow_demo_mode');
+      const demoRole = await AsyncStorage.getItem('jumbonow_demo_role');
+      if (demoMode === 'true' && demoRole) {
+        await enterDemoMode(demoRole);
+      }
 
       const done = await AsyncStorage.getItem('jumbonow_onboarding_done');
       setOnboardingDone(done === 'true');
@@ -147,7 +156,7 @@ function AppNavigator() {
     );
   }
 
-  const initialRoute = !session ? 'Landing' : !onboardingDone ? 'Onboarding' : 'Home';
+  const initialRoute = isDemoMode ? 'Home' : !session ? 'Landing' : !onboardingDone ? 'Onboarding' : 'Home';
 
   return (
     <NavigationContainer ref={navigationRef} linking={linking}>
@@ -183,7 +192,7 @@ function AppNavigator() {
         <Stack.Screen name="CampusResources" component={withSuspense(CampusResourcesScreen)} />
         <Stack.Screen name="GroupChat" component={withSuspense(GroupChatScreen)} />
       </Stack.Navigator>
-      {session && (
+      {(session || isDemoMode) && (
         <Suspense fallback={null}>
           <FreeFoodBanner />
         </Suspense>
@@ -197,7 +206,9 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <SafeAreaProvider>
-          <AppNavigator />
+          <DemoProvider>
+            <AppNavigator />
+          </DemoProvider>
         </SafeAreaProvider>
       </ThemeProvider>
     </ErrorBoundary>
